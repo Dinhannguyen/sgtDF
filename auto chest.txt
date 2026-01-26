@@ -1,0 +1,974 @@
+repeat wait() until game:IsLoaded() and game.Players.LocalPlayer
+wait(4)
+
+local preferredTeam = "Marines"
+local player = game.Players.LocalPlayer
+local remote = game:GetService("ReplicatedStorage").Remotes.CommF_
+
+spawn(function()
+    while true do
+        if not player.Team or player.Team.Name ~= preferredTeam then
+            remote:InvokeServer("SetTeam", preferredTeam)
+        end
+        wait(2)
+    end
+end) 
+
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local TeleportService = game:GetService("TeleportService")
+local HttpService = game:GetService("HttpService")
+local Workspace = game:GetService("Workspace")
+local StarterGui = game:GetService("StarterGui")
+
+local player = Players.LocalPlayer
+local autoTeleEnabled = false
+local isSitting = false
+local invisibleSeat = nil
+local sitConnection = nil
+local spaceConnection = nil
+local currentIndex = 1
+local darkFruitFound = false
+local darkbeardSpawned = false
+local teleportingToBoss = false
+
+local coords = {
+    Vector3.new(-1260.4, 9.5, 1319.9),
+    Vector3.new(-626.4, 70.8, 1246.5),
+    Vector3.new(-413.7, 14.0, 258.2),
+    Vector3.new(176.7, 70.8, 853.0),
+    Vector3.new(-850.7, 70.8, 1032.1),
+    Vector3.new(-511.9, 329.7, 588.5),
+    Vector3.new(-1014.4, 70.8, 850.7),
+    Vector3.new(-615.1, 70.8, 1233.3),
+    Vector3.new(-134.7, 70.8, 355.7),
+    Vector3.new(-1070.1, 120.8, 857.3),
+    Vector3.new(-466.8, 70.8, 1406.1),
+    Vector3.new(-168.2, 120.8, 1454.3),
+    Vector3.new(-607.0, 70.8, 1254.1),
+    Vector3.new(-387.4, 132.9, 368.9),
+    Vector3.new(-894.1, 184.8, 658.2),
+    Vector3.new(-303.9, 70.8, 1433.0),
+    Vector3.new(-411.2, 70.9, 371.3),
+    Vector3.new(-353.5, 70.9, 371.3),
+    Vector3.new(-1794.0, 147.3, 361.7),
+    Vector3.new(-302.7, 70.8, 1007.1),
+    Vector3.new(-813.5, 70.8, 1283.3),
+    Vector3.new(840.4, 119.4, 1240.3),
+    Vector3.new(881.5, 70.8, 1197.3),
+    Vector3.new(853.5, 70.8, 1459.3),
+    Vector3.new(-1852.9, 386.9, -69.5),
+    Vector3.new(-884.5, 6.0, 1843.1),
+    Vector3.new(-40.8, 45.8, 2125.6),
+    Vector3.new(-2387.9, 71.2, -2869.7),
+    Vector3.new(-1701.3, 71.2, -3088.5),
+    Vector3.new(-2630.1, 70.8, -3966.4),
+    Vector3.new(-2303.6, 71.8, -4265.0),
+    Vector3.new(-1545.5, 174.5, -3651.3),
+    Vector3.new(-1477.2, 40.9, -3897.1),
+    Vector3.new(741.7, 158.7, -4794.0),
+    Vector3.new(593.2, 399.4, -5652.4),
+    Vector3.new(858.7, 74.7, -5863.0),
+    Vector3.new(1488.6, 427.3, -5048.2),
+    Vector3.new(1440.3, 281.3, -5352.9),
+    Vector3.new(-2924.0, 4.1, -9756.0),
+    Vector3.new(-2911.9, 113.7, -10004.4),
+    Vector3.new(-2732.1, 236.7, -10255.3),
+    Vector3.new(-3263.4, 236.7, -10363.5),
+    Vector3.new(-3178.5, 236.7, -10753.8),
+    Vector3.new(-3510.3, 237.3, -10571.5),
+    Vector3.new(-3497.2, 121.1, -11540.9),
+    Vector3.new(-3831.8, 103.7, -11399.8),
+    Vector3.new(-3729.2, 104.7, -11775.0),
+    Vector3.new(-5114.1, 13.8, -6319.3),
+    Vector3.new(-5457.6, 360.8, -5971.7),
+    Vector3.new(-5317.8, 21.5, -5445.9),
+    Vector3.new(-4934.7, 141.6, -5365.5),
+    Vector3.new(-6444.9, 740.4, -4961.5),
+    Vector3.new(-5801.6, 13.8, -4590.3),
+    Vector3.new(-5673.4, 13.8, -4394.9),
+    Vector3.new(-5780.5, 13.8, -4478.4),
+    Vector3.new(-6502.6, 248.5, -4528.8),
+    Vector3.new(-6472.6, 248.5, -4441.5),
+    Vector3.new(-6524.2, 248.5, -4493.7),
+    Vector3.new(-6515.3, 248.5, -4461.0),
+    Vector3.new(-6865.3, 27.1, -5032.8),
+    Vector3.new(-5221.0, 476.6, -923.7),
+    Vector3.new(-5650.5, 264.3, -758.5),
+    Vector3.new(-5342.5, 361.1, -401.1),
+    Vector3.new(1250.3, 127.3, 33050.6),
+    Vector3.new(1250.3, 126.4, 33050.6),
+    Vector3.new(1279.6, 123.3, 33137.2),
+    Vector3.new(898.3, 123.4, 33537.3),
+    Vector3.new(1144.5, 123.3, 33238.5),
+    Vector3.new(919.9, 41.4, 32780.4),
+    Vector3.new(621.6, 123.6, 33227.6),
+    Vector3.new(1144.5, 123.3, 33136.3),
+    Vector3.new(1144.5, 123.3, 33113.7),
+    Vector3.new(1279.6, 123.3, 33236.9),
+    Vector3.new(1279.6, 123.3, 33114.4),
+    Vector3.new(-1939.4, 239.5, 1750.7),
+    Vector3.new(-5102.4, 2.0, 2469.6),
+    Vector3.new(-5102.4, 1.1, 2469.6),
+    Vector3.new(-5171.5, 104.2, 2425.4),
+    Vector3.new(-5191.7, 58.8, 2324.8),
+    Vector3.new(4823.5, 7.1, 2821.5),
+    Vector3.new(4786.0, 5.9, 2920.9),
+    Vector3.new(4823.5, 6.2, 2821.5),
+    Vector3.new(3382.4, 12.0, -3448.1),
+    Vector3.new(3842.0, 11.0, -3011.3),
+    Vector3.new(4069.1, 11.2, -3119.0),
+    Vector3.new(3382.4, 11.1, -3448.1),
+    Vector3.new(3775.7, 23.9, -3966.3),
+    Vector3.new(5839.1, 144.3, -6113.8),
+    Vector3.new(5502.7, 26.0, -6497.0),
+    Vector3.new(5135.9, 142.9, -6796.9),
+    Vector3.new(5986.5, 162.6, -6616.7),
+    Vector3.new(5598.8, 153.3, -7015.4),
+    Vector3.new(6256.4, 298.6, -6925.9),
+    Vector3.new(6302.2, 298.6, -6955.1),
+    Vector3.new(6270.7, 298.6, -6934.9),
+    Vector3.new(6611.8, 519.2, -6929.3)
+}
+
+-- Notification
+local function notify(title, text)
+    StarterGui:SetCore("SendNotification", {Title = title, Text = text, Duration = 7})
+end
+
+-- TẠO GUI MỚI - HIỆN ĐẠI, NHỎ GỌN, GÓC DƯỚI PHẢI
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "AutoChestGUI"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = player:WaitForChild("PlayerGui")
+
+-- Main Frame
+local mainFrame = Instance.new("Frame")
+mainFrame.Size = UDim2.new(0, 260, 0, 140)
+mainFrame.Position = UDim2.new(1, -270, 1, -150)
+mainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
+mainFrame.BorderSizePixel = 0
+mainFrame.Parent = screenGui
+
+local mainCorner = Instance.new("UICorner")
+mainCorner.CornerRadius = UDim.new(0, 10)
+mainCorner.Parent = mainFrame
+
+-- Gradient
+local gradient = Instance.new("UIGradient")
+gradient.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(35, 35, 45)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(20, 20, 25))
+})
+gradient.Rotation = 45
+gradient.Parent = mainFrame
+
+-- Border Glow
+local glow = Instance.new("UIStroke")
+glow.Color = Color3.fromRGB(100, 150, 255)
+glow.Thickness = 1.5
+glow.Transparency = 0.5
+glow.Parent = mainFrame
+
+-- Header
+local header = Instance.new("Frame")
+header.Size = UDim2.new(1, 0, 0, 32)
+header.BackgroundColor3 = Color3.fromRGB(100, 150, 255)
+header.BorderSizePixel = 0
+header.Parent = mainFrame
+
+local headerCorner = Instance.new("UICorner")
+headerCorner.CornerRadius = UDim.new(0, 10)
+headerCorner.Parent = header
+
+local headerBottom = Instance.new("Frame")
+headerBottom.Size = UDim2.new(1, 0, 0, 10)
+headerBottom.Position = UDim2.new(0, 0, 1, -10)
+headerBottom.BackgroundColor3 = Color3.fromRGB(100, 150, 255)
+headerBottom.BorderSizePixel = 0
+headerBottom.Parent = header
+
+-- Logo
+local logo = Instance.new("ImageLabel")
+logo.Size = UDim2.new(0, 22, 0, 22)
+logo.Position = UDim2.new(0, 8, 0.5, -11)
+logo.BackgroundTransparency = 1
+logo.Image = "rbxassetid://102837737528954"
+logo.Parent = header
+
+-- Title
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, -40, 1, 0)
+title.Position = UDim2.new(0, 34, 0, 0)
+title.BackgroundTransparency = 1
+title.Text = "Auto Dark Fragment | Zbie Nguyễn"
+title.TextColor3 = Color3.fromRGB(255, 255, 255)
+title.TextSize = 14
+title.Font = Enum.Font.GothamBold
+title.TextXAlignment = Enum.TextXAlignment.Left
+title.Parent = header
+
+-- Minimize Button
+local minimizeBtn = Instance.new("TextButton")
+minimizeBtn.Size = UDim2.new(0, 28, 0, 28)
+minimizeBtn.Position = UDim2.new(1, -32, 0, 2)
+minimizeBtn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+minimizeBtn.BackgroundTransparency = 0.85
+minimizeBtn.Text = "─"
+minimizeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+minimizeBtn.TextSize = 18
+minimizeBtn.Font = Enum.Font.GothamBold
+minimizeBtn.Parent = header
+
+local minCorner = Instance.new("UICorner")
+minCorner.CornerRadius = UDim.new(0, 6)
+minCorner.Parent = minimizeBtn
+
+-- Content
+local content = Instance.new("Frame")
+content.Size = UDim2.new(1, -16, 1, -40)
+content.Position = UDim2.new(0, 8, 0, 36)
+content.BackgroundTransparency = 1
+content.Parent = mainFrame
+
+-- Toggle Button
+local toggleBtn = Instance.new("TextButton")
+toggleBtn.Size = UDim2.new(1, 0, 0, 32)
+toggleBtn.BackgroundColor3 = Color3.fromRGB(50, 200, 100)
+toggleBtn.Text = "▶ BẮT ĐẦU"
+toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+toggleBtn.TextSize = 13
+toggleBtn.Font = Enum.Font.GothamBold
+toggleBtn.Parent = content
+
+local btnCorner = Instance.new("UICorner")
+btnCorner.CornerRadius = UDim.new(0, 7)
+btnCorner.Parent = toggleBtn
+
+-- Status Label
+local statusLabel = Instance.new("TextLabel")
+statusLabel.Size = UDim2.new(1, 0, 0, 64)
+statusLabel.Position = UDim2.new(0, 0, 0, 36)
+statusLabel.BackgroundTransparency = 1
+statusLabel.Text = "⚡ Sẵn sàng\n💎 Dark: Chưa tìm\n👹 Darkbeard: Chờ spawn"
+statusLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+statusLabel.TextSize = 11
+statusLabel.Font = Enum.Font.Gotham
+statusLabel.TextWrapped = true
+statusLabel.TextYAlignment = Enum.TextYAlignment.Top
+statusLabel.Parent = content
+
+-- Minimize Functionality
+local isMinimized = false
+minimizeBtn.MouseButton1Click:Connect(function()
+    isMinimized = not isMinimized
+    if isMinimized then
+        mainFrame:TweenSize(UDim2.new(0, 260, 0, 32), Enum.EasingDirection.Out, Enum.EasingStyle.Quad, 0.25, true)
+        minimizeBtn.Text = "+"
+        content.Visible = false
+    else
+        mainFrame:TweenSize(UDim2.new(0, 260, 0, 140), Enum.EasingDirection.Out, Enum.EasingStyle.Quad, 0.25, true)
+        minimizeBtn.Text = "─"
+        content.Visible = true
+    end
+end)
+
+-- Dragging
+local dragging = false
+local dragStart, startPos
+
+header.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPos = mainFrame.Position
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+        local delta = input.Position - dragStart
+        mainFrame.Position = UDim2.new(
+            startPos.X.Scale, startPos.X.Offset + delta.X,
+            startPos.Y.Scale, startPos.Y.Offset + delta.Y
+        )
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = false
+    end
+end)
+
+-- CHỨC NĂNG DARKBEARD CHECKER
+local function checkDarkbeard()
+    local enemies = Workspace:FindFirstChild("Enemies")
+    if not enemies then return false, nil, nil end
+    
+    for _, model in pairs(enemies:GetChildren()) do
+        if model:IsA("Model") and (model.Name:lower():find("darkbeard") or model.Name:find("Darkbeard")) then
+            local humanoid = model:FindFirstChild("Humanoid")
+            local root = model:FindFirstChild("HumanoidRootPart")
+            if humanoid and root and humanoid.Health > 0 then
+                return true, model.Name, root.Position
+            end
+        end
+    end
+    return false, nil, nil
+end
+
+-- NoClip và Freeze Character
+local noClipConnection = nil
+local function enableNoClip()
+    if noClipConnection then return end
+    noClipConnection = RunService.Stepped:Connect(function()
+        if teleportingToBoss and player.Character then
+            for _, v in pairs(player.Character:GetDescendants()) do
+                if v:IsA("BasePart") then
+                    v.CanCollide = false
+                end
+            end
+            -- Freeze character
+            if player.Character:FindFirstChild("Humanoid") then
+                player.Character.Humanoid:ChangeState(11)
+            end
+            if player.Character:FindFirstChild("HumanoidRootPart") then
+                local hrp = player.Character.HumanoidRootPart
+                hrp.Velocity = Vector3.new(0, 0, 0)
+                hrp.RotVelocity = Vector3.new(0, 0, 0)
+            end
+        end
+    end)
+end
+
+local function disableNoClip()
+    if noClipConnection then
+        noClipConnection:Disconnect()
+        noClipConnection = nil
+    end
+end
+
+-- Lock Camera
+local cameraLocked = false
+local function lockCamera(targetPos)
+    if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then return end
+    cameraLocked = true
+    local cam = workspace.CurrentCamera
+    cam.CameraType = Enum.CameraType.Scriptable
+    
+    spawn(function()
+        while cameraLocked and player.Character and player.Character:FindFirstChild("HumanoidRootPart") do
+            cam.CFrame = CFrame.new(player.Character.HumanoidRootPart.Position, targetPos)
+            wait()
+        end
+    end)
+end
+
+local function unlockCamera()
+    cameraLocked = false
+    workspace.CurrentCamera.CameraType = Enum.CameraType.Custom
+end
+
+-- CHỨC NĂNG
+local function checkForDarkFruit()
+    local backpack = player:FindFirstChild("Backpack")
+    local character = player.Character
+    
+    if backpack then
+        for _, item in ipairs(backpack:GetChildren()) do
+            local itemName = item.Name:lower()
+            if itemName:find("dark") then
+                return true, item.Name
+            end
+        end
+    end
+    
+    if character then
+        for _, item in ipairs(character:GetChildren()) do
+            if item:IsA("Tool") then
+                local itemName = item.Name:lower()
+                if itemName:find("dark") then
+                    return true, item.Name
+                end
+            end
+        end
+    end
+    
+    return false, nil
+end
+
+local function checkForFistOfDarkness()
+    local backpack = player:FindFirstChild("Backpack")
+    if backpack then
+        for _, item in ipairs(backpack:GetChildren()) do
+            if item.Name == "Fist of Darkness" then
+                return true, item.Name
+            end
+        end
+    end
+    return false, nil
+end
+
+local function restoreNormalState()
+    standUp()
+    stopHoldingSpace()
+    disableNoClip()
+    unlockCamera()
+    local character = player.Character
+    if character then
+        local humanoid = character:FindFirstChildOfClass("Humanoid")
+        if humanoid then
+            humanoid.Sit = false
+            humanoid.PlatformStand = false
+            humanoid.AutoRotate = true
+        end
+    end
+    if invisibleSeat and invisibleSeat.Parent then
+        invisibleSeat:Destroy()
+        invisibleSeat = nil
+    end
+    if sitConnection then
+        sitConnection:Disconnect()
+        sitConnection = nil
+    end
+end
+
+local function stopAllActivities()
+    autoTeleEnabled = false
+    stopHoldingSpace()
+    standUp()
+    disableNoClip()
+end
+
+-- Tele to Darkbeard with NoClip + Freeze + Lock Camera
+local function teleportToDarkbeard(bossPos)
+    if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then return end
+
+    teleportingToBoss = true
+    stopAllActivities()
+
+    local hrp = player.Character.HumanoidRootPart
+    -- Sửa ở đây: dùng vị trí trên đầu boss
+    local aboveBoss = bossPos + Vector3.new(0, 8, 0) -- 8 là cao hơn đầu boss, bạn có thể chỉnh lại
+    local distance = (hrp.Position - aboveBoss).Magnitude
+    local tweenInfo = TweenInfo.new(distance / 100, Enum.EasingStyle.Linear)
+    local tween = TweenService:Create(hrp, tweenInfo, {CFrame = CFrame.new(aboveBoss)})
+
+    enableNoClip()
+    lockCamera(aboveBoss)
+
+    tween:Play()
+    tween.Completed:Wait()
+
+    wait(0.5)
+    teleportingToBoss = false
+    disableNoClip()
+    unlockCamera()
+
+    notify("Đã đến Boss!", "Đã tele lên đầu boss!")
+end
+
+-- Auto check Darkbeard
+spawn(function()
+    while true do
+        if not darkFruitFound and not darkbeardSpawned then
+            local spawned, bossName, bossPos = checkDarkbeard()
+            if spawned then
+                darkbeardSpawned = true
+                print("🔥 DARKBEARD SPAWN: " .. bossName)
+                
+                local posStr = math.floor(bossPos.X) .. ", " .. math.floor(bossPos.Y) .. ", " .. math.floor(bossPos.Z)
+                statusLabel.Text = string.format("🔥 DARKBEARD SPAWN!\n%s\n📍 %s", bossName, posStr)
+                statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+                
+                notify("Darkbeard Spawned! 🔥", "Boss: " .. bossName .. "\nĐang tele đến boss...")
+                
+                -- Stop all activities and teleport
+                stopAllActivities()
+                wait(1)
+                teleportToDarkbeard(bossPos)
+            end
+        end
+
+        -- Nếu boss đã biến mất sau khi đã spawn thì hop server
+        if darkbeardSpawned then
+            local spawned = checkDarkbeard()
+            if not spawned then
+                statusLabel.Text = "🔄 Boss đã biến mất, hop server..."
+                wait(2)
+                serverHop()
+                break
+            end
+        end
+
+        wait(2)
+    end
+end)
+
+spawn(function()
+    while true do
+        if not darkFruitFound then
+            local found, itemName = checkForDarkFruit()
+            if found then
+                darkFruitFound = true
+                print("🎉 TÌM THẤY DARK FRUIT: " .. itemName)
+                restoreNormalState()
+                if autoTeleEnabled then
+                    autoTeleEnabled = false
+                    toggleBtn.Text = "▶ BẮT ĐẦU"
+                    toggleBtn.BackgroundColor3 = Color3.fromRGB(50, 200, 100)
+                end
+                statusLabel.Text = string.format("🎉 TÌM THẤY!\n%s", itemName)
+                statusLabel.TextColor3 = Color3.fromRGB(50, 255, 100)
+            end
+        end
+        wait(1)
+    end
+end)
+
+spawn(function()
+    while true do
+        if not darkFruitFound then
+            local found, itemName = checkForFistOfDarkness()
+            if found then
+                darkFruitFound = true
+                print("🎉 TÌM THẤY FIST OF DARKNESS: " .. itemName)
+                restoreNormalState()
+                if autoTeleEnabled then
+                    autoTeleEnabled = false
+                    toggleBtn.Text = "▶ BẮT ĐẦU"
+                    toggleBtn.BackgroundColor3 = Color3.fromRGB(50, 200, 100)
+                end
+                statusLabel.Text = string.format("🎉 TÌM THẤY!\n%s", itemName)
+                statusLabel.TextColor3 = Color3.fromRGB(50, 255, 100)
+            end
+        end
+        wait(1)
+    end
+end)
+
+local function startHoldingSpace()
+    if spaceConnection then return end
+    spaceConnection = RunService.RenderStepped:Connect(function()
+        if autoTeleEnabled and not darkFruitFound and not darkbeardSpawned then
+            VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Space, false, game)
+        end
+    end)
+end
+
+local function stopHoldingSpace()
+    if spaceConnection then
+        spaceConnection:Disconnect()
+        spaceConnection = nil
+        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Space, false, game)
+    end
+end
+
+local function isChestNearby(pos)
+    for _, obj in ipairs(workspace:GetChildren()) do
+        if obj:IsA("Model") and obj.Name:find("Chest") and (obj:GetPivot().Position - pos).Magnitude < 20 then
+            return true
+        end
+    end
+    return false
+end
+
+function standUp()
+    if not isSitting then return end
+    isSitting = false
+    local humanoid = player.Character and player.Character:FindFirstChild("Humanoid")
+    if humanoid then
+        humanoid.Sit = false
+        humanoid.Jump = true
+    end
+    if invisibleSeat and invisibleSeat.Parent then
+        invisibleSeat:Destroy()
+        invisibleSeat = nil
+    end
+    if sitConnection then
+        sitConnection:Disconnect()
+        sitConnection = nil
+    end
+end
+
+local function sitDownWithJump()
+    if isSitting or darkbeardSpawned then return end
+    local character = player.Character or player.CharacterAdded:Wait()
+    local humanoid = character:WaitForChild("Humanoid")
+    local rootPart = character:WaitForChild("HumanoidRootPart")
+    if not humanoid or not rootPart then return end
+    
+    isSitting = true
+    humanoid.Jump = true
+    wait(0.1)
+    
+    local sittingPosition = rootPart.CFrame
+    invisibleSeat = Instance.new("Seat")
+    invisibleSeat.Size = Vector3.new(2, 0.5, 2)
+    invisibleSeat.Transparency = 1
+    invisibleSeat.CanCollide = false
+    invisibleSeat.Anchored = true
+    invisibleSeat.CFrame = sittingPosition * CFrame.new(0, -2, 0)
+    invisibleSeat.Parent = workspace
+    
+    wait(0.1)
+    humanoid.Sit = true
+    rootPart.CFrame = invisibleSeat.CFrame * CFrame.new(0, 2, 0)
+    
+    sitConnection = RunService.Heartbeat:Connect(function()
+        if isSitting and invisibleSeat and invisibleSeat.Parent and autoTeleEnabled and not darkFruitFound and not darkbeardSpawned then
+            rootPart.CFrame = invisibleSeat.CFrame * CFrame.new(0, 2, 0)
+            rootPart.Velocity = Vector3.new(0, 0, 0)
+            rootPart.RotVelocity = Vector3.new(0, 0, 0)
+        else
+            if sitConnection then sitConnection:Disconnect() sitConnection = nil end
+            if invisibleSeat and invisibleSeat.Parent then invisibleSeat:Destroy() invisibleSeat = nil end
+        end
+    end)
+end
+
+local function teleportAndSit(pos)
+    if darkbeardSpawned then return end
+    local character = player.Character or player.CharacterAdded:Wait()
+    local rootPart = character:WaitForChild("HumanoidRootPart")
+    if not rootPart then return end
+    standUp()
+    rootPart.CFrame = CFrame.new(pos)
+    sitDownWithJump()
+end
+
+local function safeResetCharacter()
+    local wasAutoEnabled = autoTeleEnabled
+    autoTeleEnabled = false
+    stopHoldingSpace()
+    standUp()
+    wait(1.5)
+    
+    if darkFruitFound or darkbeardSpawned then return end
+    
+    local character = player.Character
+    if character then
+        local rootPart = character:FindFirstChild("HumanoidRootPart")
+        if rootPart then
+            rootPart.CFrame = CFrame.new(rootPart.Position.X, -1000, rootPart.Position.Z)
+        end
+    end
+    
+    pcall(function()
+        if character then
+            local humanoid = character:FindFirstChildOfClass("Humanoid")
+            if humanoid then humanoid.Health = 0 end
+        end
+    end)
+    
+    if wasAutoEnabled and not darkFruitFound and not darkbeardSpawned then
+        autoTeleEnabled = true
+    end
+end
+
+local function serverHop()
+    statusLabel.Text = "🔄 Hop server..."
+    local retryDelay = 1
+    local maxRetries = 100
+
+    local function getRandomServer()
+        local serversUrl = "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"
+        local response = game:HttpGet(serversUrl)
+        local servers = HttpService:JSONDecode(response).data
+        local availableServers = {}
+        for _, server in ipairs(servers) do
+            if server.playing < server.maxPlayers and server.id ~= game.JobId then
+                table.insert(availableServers, server.id)
+            end
+        end
+        if #availableServers > 0 then
+            return availableServers[math.random(1, #availableServers)]
+        end
+        return nil
+    end
+
+    local hopped = false
+    local tries = 0
+    while not hopped do
+        tries = tries + 1
+        if tries > maxRetries then
+            statusLabel.Text = "❌ Quá số lần thử, kick nhân vật!"
+            Players.LocalPlayer:Kick("Hop server thất bại quá 100 lần!")
+            break
+        end
+        local success, errorMsg = pcall(function()
+            local targetServer = getRandomServer()
+            if targetServer then
+                TeleportService:TeleportToPlaceInstance(game.PlaceId, targetServer, player)
+                hopped = true
+            else
+                statusLabel.Text = "❌ Không tìm thấy server, thử lại lần " .. tries
+                wait(retryDelay)
+            end
+        end)
+        if not success then
+            statusLabel.Text = "❌ Lỗi hop! Thử lại lần " .. tries
+            wait(retryDelay)
+        end
+    end
+end
+
+local function toggleAutoTele()
+    if darkbeardSpawned then
+        statusLabel.Text = "⚠️ Darkbeard spawn!\nKhông thể bật"
+        return
+    end
+    
+    autoTeleEnabled = not autoTeleEnabled
+    
+    if autoTeleEnabled then
+        if darkFruitFound then
+            autoTeleEnabled = false
+            statusLabel.Text = "⚠️ Đã tìm thấy!\nKhông bật lại được"
+            return
+        end
+        
+        toggleBtn.Text = "⏸ DỪNG"
+        toggleBtn.BackgroundColor3 = Color3.fromRGB(255, 80, 80)
+        statusLabel.Text = "🔄 Đang chạy..."
+        startHoldingSpace()
+        
+        spawn(function()
+            while autoTeleEnabled and not darkFruitFound and not darkbeardSpawned do
+                if currentIndex > #coords then
+                    autoTeleEnabled = false
+                    stopHoldingSpace()
+                    standUp()
+                    serverHop()
+                    break
+                end
+
+                local character = player.Character or player.CharacterAdded:Wait()
+                local beliValue = player:WaitForChild("Data"):WaitForChild("Beli")
+                local currentBeli = beliValue.Value
+
+                teleportAndSit(coords[currentIndex])
+                statusLabel.Text = string.format("📍 %d/%d\n💰 %d\n👹 Darkbeard: Chờ", currentIndex, #coords, currentBeli)
+
+                wait(0.5)
+                if not isChestNearby(coords[currentIndex]) then
+                    currentIndex = currentIndex + 1
+
+                    if currentIndex % 10 == 1 and currentIndex > 1 then
+                        statusLabel.Text = string.format("🔄 Reset %d...\n👹 Darkbeard: Chờ", currentIndex - 1)
+                        
+                        local charAdded = false
+                        local conn = player.CharacterAdded:Connect(function()
+                            charAdded = true
+                            if autoTeleEnabled and not darkFruitFound and not darkbeardSpawned then
+                                startHoldingSpace()
+                            end
+                        end)
+                        
+                        safeResetCharacter()
+                        
+                        local timeout = 15
+                        local elapsed = 0
+                        while not charAdded and elapsed < timeout do
+                            wait(0.5)
+                            elapsed = elapsed + 0.5
+                        end
+                        conn:Disconnect()
+                        wait(1)
+                    end
+                    continue
+                end
+
+                local waitTime = 0
+                local maxWait = 10
+                local gotBeli = false
+                while autoTeleEnabled and waitTime < maxWait do
+                    wait(0.5)
+                    waitTime = waitTime + 0.5
+                    if beliValue.Value > currentBeli then
+                        gotBeli = true
+                        break
+                    end
+                end
+                if not gotBeli then
+                    wait(5)
+                end
+
+                currentIndex = currentIndex + 1
+
+                if currentIndex % 10 == 1 and currentIndex > 1 then
+                    statusLabel.Text = string.format("🔄 Reset %d...\n👹 Darkbeard: Chờ", currentIndex - 1)
+                    
+                    local charAdded = false
+                    local conn = player.CharacterAdded:Connect(function()
+                        charAdded = true
+                        if autoTeleEnabled and not darkFruitFound and not darkbeardSpawned then
+                            startHoldingSpace()
+                        end
+                    end)
+                    
+                    safeResetCharacter()
+                    
+                    local timeout = 15
+                    local elapsed = 0
+                    while not charAdded and elapsed < timeout do
+                        wait(0.5)
+                        elapsed = elapsed + 0.5
+                    end
+                    conn:Disconnect()
+                    wait(1)
+                end
+            end
+        end)
+    else
+        toggleBtn.Text = "▶ BẮT ĐẦU"
+        toggleBtn.BackgroundColor3 = Color3.fromRGB(50, 200, 100)
+        stopHoldingSpace()
+        standUp()
+        statusLabel.Text = "⏸️ Đã dừng\n👹 Darkbeard: Chờ"
+    end
+end
+
+toggleBtn.MouseButton1Click:Connect(toggleAutoTele)
+
+-- Auto Start
+autoTeleEnabled = true
+spawn(function()
+    while true do
+        if player.Character and not darkFruitFound and not darkbeardSpawned then
+            if currentIndex > #coords then
+                currentIndex = 1
+            end
+
+            statusLabel.Text = "🔄 Đang chạy...\n👹 Darkbeard: Chờ"
+            startHoldingSpace()
+
+            while autoTeleEnabled and not darkFruitFound and not darkbeardSpawned and player.Character do
+                if currentIndex > #coords then
+                    stopHoldingSpace()
+                    standUp()
+                    serverHop()
+                    break
+                end
+
+                local character = player.Character
+                local beliValue = player:WaitForChild("Data"):WaitForChild("Beli")
+                local currentBeli = beliValue.Value
+
+                teleportAndSit(coords[currentIndex])
+                statusLabel.Text = string.format("📍 %d/%d\n💰 %d\n👹 Darkbeard: Chờ", currentIndex, #coords, currentBeli)
+
+                wait(0.5)
+                if not isChestNearby(coords[currentIndex]) then
+                    currentIndex = currentIndex + 1
+
+                    if currentIndex % 10 == 1 and currentIndex > 1 then
+                        statusLabel.Text = string.format("🔄 Reset %d...\n👹 Darkbeard: Chờ", currentIndex - 1)
+                        
+                        local charAdded = false
+                        local conn = player.CharacterAdded:Connect(function()
+                            charAdded = true
+                            if autoTeleEnabled and not darkFruitFound and not darkbeardSpawned then
+                                startHoldingSpace()
+                            end
+                        end)
+                        
+                        safeResetCharacter()
+                        
+                        local timeout = 15
+                        local elapsed = 0
+                        while not charAdded and elapsed < timeout do
+                            wait(0.5)
+                            elapsed = elapsed + 0.5
+                        end
+                        conn:Disconnect()
+                        wait(1)
+                    end
+                    continue
+                end
+
+                local waitTime = 0
+                local maxWait = 10
+                local gotBeli = false
+                while autoTeleEnabled and waitTime < maxWait do
+                    wait(0.5)
+                    waitTime = waitTime + 0.5
+                    if beliValue.Value > currentBeli then
+                        gotBeli = true
+                        break
+                    end
+                end
+                if not gotBeli then
+                    wait(5)
+                end
+
+                currentIndex = currentIndex + 1
+
+                if currentIndex % 10 == 1 and currentIndex > 1 then
+                    statusLabel.Text = string.format("🔄 Reset %d...\n👹 Darkbeard: Chờ", currentIndex - 1)
+                    
+                    local charAdded = false
+                    local conn = player.CharacterAdded:Connect(function()
+                        charAdded = true
+                        if autoTeleEnabled and not darkFruitFound and not darkbeardSpawned then
+                            startHoldingSpace()
+                        end
+                    end)
+                    
+                    safeResetCharacter()
+                    
+                    local timeout = 15
+                    local elapsed = 0
+                    while not charAdded and elapsed < timeout do
+                        wait(0.5)
+                        elapsed = elapsed + 0.5
+                    end
+                    conn:Disconnect()
+                    wait(1)
+                end
+            end
+        end
+        wait(1)
+    end
+end)
+
+player.CharacterAdded:Connect(function()
+    wait(1)
+    if darkFruitFound then
+        restoreNormalState()
+    elseif darkbeardSpawned then
+        -- Do nothing, wait for manual action after teleport to boss
+    elseif autoTeleEnabled then
+        startHoldingSpace()
+    end
+end)
+
+print("✅ Script loaded with Darkbeard auto detector + teleport!")
+print("🔥 Khi Darkbeard spawn, script sẽ tự động dừng và tele đến boss!")
+
+
+
+
+-- Auto Equip Melee and Haki Script
+spawn(function()
+    while wait(1) do
+        pcall(function()
+            -- Auto pick Melee tool
+            local player = game.Players.LocalPlayer
+            for _, v in pairs(player.Backpack:GetChildren()) do
+                if v:IsA("Tool") and v.ToolTip == "Melee" then
+                    player.Character.Humanoid:EquipTool(v)
+                    break
+                end
+            end
+            -- Auto enable Haki vũ trang
+            if not player.Character:FindFirstChild("HasBuso") then
+                game.ReplicatedStorage.Remotes.CommF_:InvokeServer("Buso")
+            end
+        end)
+    end
+end)
