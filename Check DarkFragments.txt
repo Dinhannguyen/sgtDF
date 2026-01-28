@@ -45,8 +45,9 @@ while true do
     inv = getInventory()
     count = countDarkFragments(inv)
     print("Số lượng Dark Fragment:", count)
-    if count >= 1 then
+    if count >= 2 then
         writeCompletedFile()
         break -- dừng lại sau khi đã ghi file, hoặc bỏ dòng này nếu muốn ghi liên tục
     end
+
 end
