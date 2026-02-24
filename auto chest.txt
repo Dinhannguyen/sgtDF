@@ -675,79 +675,78 @@ local TeleportService = game:GetService("TeleportService")
 local Players = game:GetService("Players")
 local player = Players.LocalPlayer
 
+local HttpService = game:GetService("HttpService")
+local TeleportService = game:GetService("TeleportService")
+local Players = game:GetService("Players")
+
 local function serverHop()
-    statusLabel.Text = "🔄 Đang tìm server..."
-    local retryDelay = 1.5 -- Tăng nhẹ lên 1.5s để tránh Rate Limit (Lỗi 429)
-    local maxRetries = 100
-    local cursor = "" -- Dùng để lật sang trang server tiếp theo
+    statusLabel.Text = "🔄 Đang tải danh sách server..."
+    
+    -- 1. Gọi API 1 lần duy nhất bên ngoài vòng lặp (Sửa sortOrder thành Desc để lấy server mới hơn)
+    local serversUrl = "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Desc&limit=100"
+    
+    local success, response = pcall(function()
+        return game:HttpGet(serversUrl)
+    end)
 
-    local function getRandomServer()
-        -- Đổi thành Desc để lấy server chất lượng hơn, hoặc bỏ tham số sortOrder
-        local serversUrl = "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Desc&limit=100"
+    if not success then
+        statusLabel.Text = "❌ Lỗi kết nối API Roblox!"
+        task.wait(2)
+        return
+    end
+
+    local decodedData
+    local decodeSuccess, _ = pcall(function()
+        decodedData = HttpService:JSONDecode(response)
+    end)
+
+    if not decodeSuccess or not decodedData or not decodedData.data then
+        statusLabel.Text = "❌ Lỗi đọc dữ liệu server!"
+        return
+    end
+
+    -- 2. Lọc ra các server hợp lệ
+    local availableServers = {}
+    for _, server in ipairs(decodedData.data) do
+        -- Trừ đi 1 slot (server.maxPlayers - 1) để đảm bảo server thực sự còn chỗ
+        if type(server) == "table" and server.id ~= game.JobId and server.playing and server.maxPlayers then
+            if server.playing < (server.maxPlayers - 1) then 
+                table.insert(availableServers, server.id)
+            end
+        end
+    end
+
+    if #availableServers == 0 then
+        statusLabel.Text = "❌ Không có server nào trống lúc này!"
+        return
+    end
+
+    -- 3. Tiến hành vòng lặp Hop dựa trên danh sách đã lưu
+    local maxRetries = math.min(10, #availableServers) -- Rút gọn số lần thử, 10 lần là quá đủ
+    
+    for tries = 1, maxRetries do
+        statusLabel.Text = "🔄 Hop server... Lần " .. tries
         
-        -- Nếu có cursor, cộng thêm vào URL để lật trang
-        if cursor and cursor ~= "" then
-            serversUrl = serversUrl .. "&cursor=" .. cursor
-        end
-
-        -- Phải bọc pcall ngay tại bước gọi HTTP
-        local success, response = pcall(function()
-            return game:HttpGet(serversUrl)
+        -- Chọn ngẫu nhiên 1 server trong danh sách đã lọc
+        local randomServerId = availableServers[math.random(1, #availableServers)]
+        
+        local tpSuccess, tpError = pcall(function()
+            TeleportService:TeleportToPlaceInstance(game.PlaceId, randomServerId, Players.LocalPlayer)
         end)
-
-        if not success then return nil end
-
-        local decoded = HttpService:JSONDecode(response)
-        if not decoded or not decoded.data then return nil end
-
-        -- Lưu lại cursor của trang tiếp theo
-        cursor = decoded.nextPageCursor
-
-        local availableServers = {}
-        for _, server in ipairs(decoded.data) do
-            -- Kiểm tra server hợp lệ, không phải server hiện tại và chưa đầy
-            if type(server) == "table" and server.id ~= game.JobId then
-                if server.playing < server.maxPlayers then
-                    table.insert(availableServers, server.id)
-                end
-            end
-        end
-
-        if #availableServers > 0 then
-            return availableServers[math.random(1, #availableServers)]
-        end
-        return nil
-    end
-
-    local tries = 0
-    while tries < maxRetries do
-        tries = tries + 1
-        local targetServer = getRandomServer()
-
-        if targetServer then
-            statusLabel.Text = "🔄 Đang kết nối... (Lần " .. tries .. ")"
-            
-            local success, err = pcall(function()
-                TeleportService:TeleportToPlaceInstance(game.PlaceId, targetServer, player)
-            end)
-
-            if success then
-                -- Chờ 5 giây để game thực hiện việc chuyển server. 
-                -- Nếu thất bại, vòng lặp vẫn tiếp tục.
-                task.wait(5) 
-            else
-                statusLabel.Text = "❌ Lỗi Teleport! Thử lại lần " .. tries
-                task.wait(retryDelay)
-            end
+        
+        if tpSuccess then
+            statusLabel.Text = "✅ Đang dịch chuyển..."
+            -- Chờ 5 giây để game thực hiện quá trình teleport
+            task.wait(5)
         else
-            -- Nếu trang này không có server phù hợp, nó sẽ lật sang trang tiếp theo nhờ biến cursor
-            statusLabel.Text = "❌ Tìm trang mới... (Lần " .. tries .. ")"
-            task.wait(retryDelay)
+            statusLabel.Text = "❌ Lỗi hop! Thử lại..."
+            task.wait(1.5)
         end
     end
-
-    statusLabel.Text = "❌ Quá số lần thử, kick nhân vật!"
-    player:Kick("Hop server thất bại quá 100 lần! Vui lòng thử lại sau.")
+    
+    -- Nếu qua hết vòng lặp mà vẫn còn ở server cũ
+    statusLabel.Text = "❌ Không thể hop thành công!"
+    Players.LocalPlayer:Kick("Dịch chuyển thất bại sau nhiều lần thử. Vui lòng chạy lại script!")
 end
 
 local function toggleAutoTele()
@@ -1006,3 +1005,4 @@ spawn(function()
     end
 
 end)
+
