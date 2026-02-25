@@ -680,95 +680,70 @@ local TeleportService = game:GetService("TeleportService")
 local Players = game:GetService("Players")
 
 local function serverHop()
-
     statusLabel.Text = "🔄 Hop server..."
 
-    local retryDelay = 1
-
+    local retryDelay = 2  -- tăng từ 1 lên 2
     local maxRetries = 100
 
-
-
     local function getRandomServer()
-
-        local serversUrl = "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"
-
-        local response = game:HttpGet(serversUrl)
-
-        local servers = HttpService:JSONDecode(response).data
+        -- Thêm pcall riêng để bắt lỗi HTTP
+        local success, response = pcall(function()
+            return game:HttpGet("https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100")
+        end)
+        
+        if not success or not response then
+            return nil
+        end
+        
+        local ok, decoded = pcall(function()
+            return HttpService:JSONDecode(response)
+        end)
+        
+        if not ok or not decoded or not decoded.data then
+            return nil
+        end
 
         local availableServers = {}
-
-        for _, server in ipairs(servers) do
-
+        for _, server in ipairs(decoded.data) do
             if server.playing < server.maxPlayers and server.id ~= game.JobId then
-
                 table.insert(availableServers, server.id)
-
             end
-
         end
 
         if #availableServers > 0 then
-
             return availableServers[math.random(1, #availableServers)]
-
         end
-
         return nil
-
     end
-
-
 
     local hopped = false
-
     local tries = 0
-
     while not hopped do
-
         tries = tries + 1
-
         if tries > maxRetries then
-
             statusLabel.Text = "❌ Quá số lần thử, kick nhân vật!"
-
             Players.LocalPlayer:Kick("Hop server thất bại quá 100 lần!")
-
             break
-
         end
 
-        local success, errorMsg = pcall(function()
-
-            local targetServer = getRandomServer()
-
-            if targetServer then
-
+        local targetServer = getRandomServer()
+        if targetServer then
+            local ok = pcall(function()
                 TeleportService:TeleportToPlaceInstance(game.PlaceId, targetServer, player)
-
+            end)
+            if ok then
                 hopped = true
-
             else
-
-                statusLabel.Text = "❌ Không tìm thấy server, thử lại lần " .. tries
-
+                statusLabel.Text = "❌ Lỗi teleport! Thử lại lần " .. tries
                 wait(retryDelay)
-
             end
-
-        end)
-
-        if not success then
-
-            statusLabel.Text = "❌ Lỗi hop! Thử lại lần " .. tries
-
-            wait(retryDelay)
-
+        else
+            -- Backoff: nếu lỗi liên tiếp thì tăng delay dần
+            local delay = math.min(retryDelay * (1 + tries * 0.1), 10)
+            statusLabel.Text = "❌ API lỗi/rate limit. Thử lại lần " .. tries .. " (chờ " .. math.floor(delay) .. "s)"
+            wait(delay)
         end
-
     end
-
 end
 
 local function toggleAutoTele()
@@ -1027,5 +1002,6 @@ spawn(function()
     end
 
 end)
+
 
 
