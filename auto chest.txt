@@ -670,81 +670,159 @@ local function safeResetCharacter()
     end
 end
 
-local HttpService = game:GetService("HttpService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TeleportService = game:GetService("TeleportService")
 local Players = game:GetService("Players")
-local player = Players.LocalPlayer
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local UserInputService = game:GetService("UserInputService")
 
-local HttpService = game:GetService("HttpService")
-local TeleportService = game:GetService("TeleportService")
-local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local isHopping = false
 
-local function serverHop()
-    statusLabel.Text = "🔄 Hop server..."
+-- THIẾT LẬP TÌM KIẾM
+local targetCountMin = 1
+local targetCountMax = 4
+local targetRegion = "Singapore"
 
-    local retryDelay = 2  -- tăng từ 1 lên 2
-    local maxRetries = 100
+-- HOOK METATABLE (Phải để ngoài hàm để tránh lỗi crash khi gọi serverHop nhiều lần)
+local mt = getrawmetatable(game)
+local oldNamecall = mt.__namecall
+setreadonly(mt, false)
 
-    local function getRandomServer()
-        -- Thêm pcall riêng để bắt lỗi HTTP
-        local success, response = pcall(function()
-            return game:HttpGet("https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100")
-        end)
-        
-        if not success or not response then
-            return nil
-        end
-        
-        local ok, decoded = pcall(function()
-            return HttpService:JSONDecode(response)
-        end)
-        
-        if not ok or not decoded or not decoded.data then
-            return nil
-        end
-
-        local availableServers = {}
-        for _, server in ipairs(decoded.data) do
-            if server.playing < server.maxPlayers and server.id ~= game.JobId then
-                table.insert(availableServers, server.id)
-            end
-        end
-
-        if #availableServers > 0 then
-            return availableServers[math.random(1, #availableServers)]
-        end
-        return nil
-    end
-
-    local hopped = false
-    local tries = 0
-    while not hopped do
-        tries = tries + 1
-        if tries > maxRetries then
-            statusLabel.Text = "❌ Quá số lần thử, kick nhân vật!"
-            Players.LocalPlayer:Kick("Hop server thất bại quá 100 lần!")
-            break
-        end
-
-        local targetServer = getRandomServer()
-        if targetServer then
-            local ok = pcall(function()
-                TeleportService:TeleportToPlaceInstance(game.PlaceId, targetServer, player)
+mt.__namecall = newcclosure(function(self, ...)
+    local method = getnamecallmethod()
+    local response = oldNamecall(self, ...)
+    
+    if not isHopping and (method == "InvokeServer" or method == "FireServer") and tostring(self.Name) == "__ServerBrowser" then
+        if type(response) == "table" then
+            task.defer(function()
+                -- Gọi hàm Filter ở global/shared hoặc xử lý trực tiếp
+                if shared.FilterAndJump then
+                    shared.FilterAndJump(response)
+                end
             end)
-            if ok then
-                hopped = true
-            else
-                statusLabel.Text = "❌ Lỗi teleport! Thử lại lần " .. tries
-                wait(retryDelay)
-            end
-        else
-            -- Backoff: nếu lỗi liên tiếp thì tăng delay dần
-            local delay = math.min(retryDelay * (1 + tries * 0.1), 10)
-            statusLabel.Text = "❌ API lỗi/rate limit. Thử lại lần " .. tries .. " (chờ " .. math.floor(delay) .. "s)"
-            wait(delay)
         end
     end
+    return response
+end)
+setreadonly(mt, true)
+
+
+-- HÀM HOP SERVER MỚI
+local function serverHop()
+    if isHopping then return end
+    statusLabel.Text = "🔄 Đang khởi động Server Browser..."
+
+    local startTime = tick()
+
+    -- Khai báo hàm lọc server (chia sẻ qua biến shared để hook ở trên có thể dùng được)
+    shared.FilterAndJump = function(serverList)
+        if isHopping or type(serverList) ~= "table" then return end
+        local bestJobId = nil
+        
+        for jobId, info in pairs(serverList) do
+            if type(info) == "table" then
+                local pCount = tonumber(info.Count) or 0
+                local pRegion = tostring(info.Region) or ""
+                
+                if jobId ~= game.JobId and string.find(pRegion, targetRegion) and (pCount >= targetCountMin and pCount <= targetCountMax) then
+                    bestJobId = jobId
+                    break 
+                end
+            end
+        end
+        
+        if bestJobId then
+            isHopping = true
+            statusLabel.Text = "⚡ Đã tìm thấy server (" .. targetRegion .. ")! Đang teleport..."
+            pcall(function()
+                TeleportService:TeleportToPlaceInstance(game.PlaceId, bestJobId, LocalPlayer)
+            end)
+        end
+    end
+
+    local function ClickRefresh()
+        pcall(function()
+            local gui = LocalPlayer.PlayerGui:FindFirstChild("ServerBrowser")
+            if not gui then return end
+            local frame = gui:FindFirstChild("Frame")
+            if not frame then return end
+            local refreshBtn = frame:FindFirstChild("Refresh")
+            
+            if refreshBtn and refreshBtn.Visible then
+                local x = refreshBtn.AbsolutePosition.X + (refreshBtn.AbsoluteSize.X / 2)
+                local y = refreshBtn.AbsolutePosition.Y + (refreshBtn.AbsoluteSize.Y / 2) + 58
+                VirtualInputManager:SendMouseButtonEvent(x, y, 0, true, game, 1)
+                task.wait(0.05)
+                VirtualInputManager:SendMouseButtonEvent(x, y, 0, false, game, 1)
+            end
+        end)
+    end
+
+    task.wait(1)
+    
+    -- Lấy UI Server Browser
+    local ui = LocalPlayer:WaitForChild("PlayerGui"):WaitForChild("ServerBrowser", 5)
+    if ui then
+        ui.Enabled = true
+        local frame = ui:FindFirstChild("Frame")
+        if frame then 
+            frame.Visible = true 
+            local filters = frame:FindFirstChild("Filters")
+            if filters and filters:FindFirstChild("SearchRegion") and filters.SearchRegion:FindFirstChild("TextBox") then
+                filters.SearchRegion.TextBox.Text = targetRegion
+            end
+        end
+    else
+        statusLabel.Text = "❌ Không tìm thấy giao diện Server Browser!"
+        return
+    end
+    
+    startTime = tick()
+    
+    -- Vòng lặp tìm kiếm
+    task.spawn(function()
+        while not isHopping do
+            statusLabel.Text = "🔍 Đang quét server (" .. targetRegion .. ")..."
+            
+            pcall(function()
+                local remote = ReplicatedStorage:FindFirstChild("__ServerBrowser")
+                if remote then
+                    remote:InvokeServer(1, targetRegion)
+                end
+            end)
+            
+            task.wait(3)
+            
+            if not isHopping then
+                -- Nếu kẹt quá 10 giây, reset lại UI
+                if (tick() - startTime) >= 10 then
+                    statusLabel.Text = "🔄 Làm mới lại bảng Server Browser..."
+                    pcall(function()
+                        if ui then
+                            ui.Enabled = false
+                            task.wait(0.5)
+                            ui.Enabled = true
+                            if ui:FindFirstChild("Frame") then ui.Frame.Visible = true end
+                            
+                            local remote = ReplicatedStorage:FindFirstChild("__ServerBrowser")
+                            if remote then remote:InvokeServer(1, targetRegion) end
+                        end
+                    end)
+                    startTime = tick()
+                else
+                    -- Auto click nút refresh nếu cửa sổ game đang active
+                    if UserInputService.WindowFocused then
+                        ClickRefresh()
+                    end
+                end
+            end
+        end
+    end)
 end
+
+-- Cách sử dụng: Gọi hàm serverHop() khi bạn muốn đổi server.
+-- serverHop()
 
 local function toggleAutoTele()
     if darkbeardSpawned then
@@ -1002,6 +1080,7 @@ spawn(function()
     end
 
 end)
+
 
 
 
