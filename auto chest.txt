@@ -17,7 +17,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local player = Players.LocalPlayer
 local LocalPlayer = Players.LocalPlayer
 local remote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("CommF_")
-local preferredTeam = "Marines"
+local preferredTeam = "aa"
 
 -- Tự động chọn phe
 spawn(function()
@@ -1075,5 +1075,6 @@ spawn(function()
         end)
     end
 end)
+
 
 
