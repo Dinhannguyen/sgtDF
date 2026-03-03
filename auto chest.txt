@@ -17,7 +17,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local player = Players.LocalPlayer
 local LocalPlayer = Players.LocalPlayer
 local remote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("CommF_")
-local preferredTeam = "aa"
+local preferredTeam = "Marine"
 
 -- Tự động chọn phe
 spawn(function()
@@ -49,7 +49,7 @@ local targetRegion = "Singapore"
 -- TỌA ĐỘ RƯƠNG (Nhớ dán full tọa độ của bạn vào đây)
 local coords = {
     Vector3.new(-1260.4, 9.5, 1319.9),
-      Vector3.new(-626.4, 70.8, 1246.5),
+       Vector3.new(-626.4, 70.8, 1246.5),
     Vector3.new(-413.7, 14.0, 258.2),
     Vector3.new(176.7, 70.8, 853.0),
     Vector3.new(-850.7, 70.8, 1032.1),
@@ -1075,6 +1075,3 @@ spawn(function()
         end)
     end
 end)
-
-
-
