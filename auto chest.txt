@@ -17,17 +17,6 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local player = Players.LocalPlayer
 local LocalPlayer = Players.LocalPlayer
 local remote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("CommF_")
-local preferredTeam = "Marine"
-
--- Tự động chọn phe
-spawn(function()
-    while true do
-        if not player.Team or player.Team.Name ~= preferredTeam then
-            remote:InvokeServer("SetTeam", preferredTeam)
-        end
-        wait(2)
-    end
-end)
 
 -- BIẾN TRẠNG THÁI
 local autoTeleEnabled = false
