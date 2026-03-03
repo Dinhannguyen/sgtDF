@@ -1,19 +1,7 @@
 repeat wait() until game:IsLoaded() and game.Players.LocalPlayer
 wait(4)
 
-local preferredTeam = "Marines"
-local player = game.Players.LocalPlayer
-local remote = game:GetService("ReplicatedStorage").Remotes.CommF_
-
-spawn(function()
-    while true do
-        if not player.Team or player.Team.Name ~= preferredTeam then
-            remote:InvokeServer("SetTeam", preferredTeam)
-        end
-        wait(2)
-    end
-end) 
-
+-- CÁC DỊCH VỤ (SERVICES)
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
@@ -23,8 +11,25 @@ local TeleportService = game:GetService("TeleportService")
 local HttpService = game:GetService("HttpService")
 local Workspace = game:GetService("Workspace")
 local StarterGui = game:GetService("StarterGui")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+-- BIẾN CƠ BẢN
 local player = Players.LocalPlayer
+local LocalPlayer = Players.LocalPlayer
+local remote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("CommF_")
+local preferredTeam = "Marines"
+
+-- Tự động chọn phe
+spawn(function()
+    while true do
+        if not player.Team or player.Team.Name ~= preferredTeam then
+            remote:InvokeServer("SetTeam", preferredTeam)
+        end
+        wait(2)
+    end
+end)
+
+-- BIẾN TRẠNG THÁI
 local autoTeleEnabled = false
 local isSitting = false
 local invisibleSeat = nil
@@ -34,10 +39,17 @@ local currentIndex = 1
 local darkFruitFound = false
 local darkbeardSpawned = false
 local teleportingToBoss = false
+local isHopping = false
 
+-- THIẾT LẬP TÌM KIẾM SERVER
+local targetCountMin = 1
+local targetCountMax = 4
+local targetRegion = "Singapore"
+
+-- TỌA ĐỘ RƯƠNG (Nhớ dán full tọa độ của bạn vào đây)
 local coords = {
     Vector3.new(-1260.4, 9.5, 1319.9),
-    Vector3.new(-626.4, 70.8, 1246.5),
+      Vector3.new(-626.4, 70.8, 1246.5),
     Vector3.new(-413.7, 14.0, 258.2),
     Vector3.new(176.7, 70.8, 853.0),
     Vector3.new(-850.7, 70.8, 1032.1),
@@ -145,7 +157,6 @@ screenGui.Name = "AutoChestGUI"
 screenGui.ResetOnSpawn = false
 screenGui.Parent = player:WaitForChild("PlayerGui")
 
--- Main Frame
 local mainFrame = Instance.new("Frame")
 mainFrame.Size = UDim2.new(0, 260, 0, 140)
 mainFrame.Position = UDim2.new(1, -270, 1, -150)
@@ -157,7 +168,6 @@ local mainCorner = Instance.new("UICorner")
 mainCorner.CornerRadius = UDim.new(0, 10)
 mainCorner.Parent = mainFrame
 
--- Gradient
 local gradient = Instance.new("UIGradient")
 gradient.Color = ColorSequence.new({
     ColorSequenceKeypoint.new(0, Color3.fromRGB(35, 35, 45)),
@@ -166,14 +176,12 @@ gradient.Color = ColorSequence.new({
 gradient.Rotation = 45
 gradient.Parent = mainFrame
 
--- Border Glow
 local glow = Instance.new("UIStroke")
 glow.Color = Color3.fromRGB(100, 150, 255)
 glow.Thickness = 1.5
 glow.Transparency = 0.5
 glow.Parent = mainFrame
 
--- Header
 local header = Instance.new("Frame")
 header.Size = UDim2.new(1, 0, 0, 32)
 header.BackgroundColor3 = Color3.fromRGB(100, 150, 255)
@@ -191,7 +199,6 @@ headerBottom.BackgroundColor3 = Color3.fromRGB(100, 150, 255)
 headerBottom.BorderSizePixel = 0
 headerBottom.Parent = header
 
--- Logo
 local logo = Instance.new("ImageLabel")
 logo.Size = UDim2.new(0, 22, 0, 22)
 logo.Position = UDim2.new(0, 8, 0.5, -11)
@@ -199,7 +206,6 @@ logo.BackgroundTransparency = 1
 logo.Image = "rbxassetid://102837737528954"
 logo.Parent = header
 
--- Title
 local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, -40, 1, 0)
 title.Position = UDim2.new(0, 34, 0, 0)
@@ -211,7 +217,6 @@ title.Font = Enum.Font.GothamBold
 title.TextXAlignment = Enum.TextXAlignment.Left
 title.Parent = header
 
--- Minimize Button
 local minimizeBtn = Instance.new("TextButton")
 minimizeBtn.Size = UDim2.new(0, 28, 0, 28)
 minimizeBtn.Position = UDim2.new(1, -32, 0, 2)
@@ -227,14 +232,12 @@ local minCorner = Instance.new("UICorner")
 minCorner.CornerRadius = UDim.new(0, 6)
 minCorner.Parent = minimizeBtn
 
--- Content
 local content = Instance.new("Frame")
 content.Size = UDim2.new(1, -16, 1, -40)
 content.Position = UDim2.new(0, 8, 0, 36)
 content.BackgroundTransparency = 1
 content.Parent = mainFrame
 
--- Toggle Button
 local toggleBtn = Instance.new("TextButton")
 toggleBtn.Size = UDim2.new(1, 0, 0, 32)
 toggleBtn.BackgroundColor3 = Color3.fromRGB(50, 200, 100)
@@ -248,7 +251,6 @@ local btnCorner = Instance.new("UICorner")
 btnCorner.CornerRadius = UDim.new(0, 7)
 btnCorner.Parent = toggleBtn
 
--- Status Label
 local statusLabel = Instance.new("TextLabel")
 statusLabel.Size = UDim2.new(1, 0, 0, 64)
 statusLabel.Position = UDim2.new(0, 0, 0, 36)
@@ -304,6 +306,159 @@ UserInputService.InputEnded:Connect(function(input)
     end
 end)
 
+-- HOOK METATABLE (Dùng cho Server Browser)
+local mt = getrawmetatable(game)
+local oldNamecall = mt.__namecall
+setreadonly(mt, false)
+
+mt.__namecall = newcclosure(function(self, ...)
+    local method = getnamecallmethod()
+    local response = oldNamecall(self, ...)
+    
+    if not isHopping and (method == "InvokeServer" or method == "FireServer") and tostring(self.Name) == "__ServerBrowser" then
+        if type(response) == "table" then
+            task.defer(function()
+                if shared.FilterAndJump then
+                    shared.FilterAndJump(response)
+                end
+            end)
+        end
+    end
+    return response
+end)
+setreadonly(mt, true)
+
+-- HÀM HOP SERVER BẰNG HTTP (CƠ CHẾ DỰ PHÒNG)
+local function httpServerHop()
+    if isHopping then return end
+    statusLabel.Text = "🌐 Server Browser lỗi, đang chuyển sang HTTP Hop..."
+    
+    local success, response = pcall(function()
+        local url = "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"
+        return game:HttpGet(url)
+    end)
+    
+    if success and response then
+        local data = HttpService:JSONDecode(response)
+        if data and data.data then
+            for _, server in ipairs(data.data) do
+                if server.id ~= game.JobId and server.playing >= targetCountMin and server.playing <= targetCountMax then
+                    isHopping = true
+                    statusLabel.Text = "⚡ Đã tìm thấy server (HTTP)! Đang teleport..."
+                    pcall(function()
+                        TeleportService:TeleportToPlaceInstance(game.PlaceId, server.id, LocalPlayer)
+                    end)
+                    task.wait(3)
+                    break
+                end
+            end
+        end
+    end
+    
+    if not isHopping then
+        statusLabel.Text = "❌ HTTP Hop không tìm thấy server phù hợp. Đang thử lại..."
+    end
+end
+
+-- HÀM HOP SERVER CHÍNH MỚI
+local function serverHop()
+    if isHopping then return end
+    statusLabel.Text = "🔄 Đang khởi động Server Browser..."
+
+    local startTime = tick()
+
+    shared.FilterAndJump = function(serverList)
+        if isHopping or type(serverList) ~= "table" then return end
+        local bestJobId = nil
+        
+        for jobId, info in pairs(serverList) do
+            if type(info) == "table" then
+                local pCount = tonumber(info.Count) or 0
+                local pRegion = tostring(info.Region) or ""
+                
+                if jobId ~= game.JobId and string.find(pRegion, targetRegion) and (pCount >= targetCountMin and pCount <= targetCountMax) then
+                    bestJobId = jobId
+                    break 
+                end
+            end
+        end
+        
+        if bestJobId then
+            isHopping = true
+            statusLabel.Text = "⚡ Đã tìm thấy server (" .. targetRegion .. ")! Đang teleport..."
+            pcall(function()
+                TeleportService:TeleportToPlaceInstance(game.PlaceId, bestJobId, LocalPlayer)
+            end)
+        end
+    end
+
+    local function ClickRefresh()
+        pcall(function()
+            local gui = LocalPlayer.PlayerGui:FindFirstChild("ServerBrowser")
+            if not gui then return end
+            local frame = gui:FindFirstChild("Frame")
+            if not frame then return end
+            local refreshBtn = frame:FindFirstChild("Refresh")
+            
+            if refreshBtn and refreshBtn.Visible then
+                local x = refreshBtn.AbsolutePosition.X + (refreshBtn.AbsoluteSize.X / 2)
+                local y = refreshBtn.AbsolutePosition.Y + (refreshBtn.AbsoluteSize.Y / 2) + 58
+                VirtualInputManager:SendMouseButtonEvent(x, y, 0, true, game, 1)
+                task.wait(0.05)
+                VirtualInputManager:SendMouseButtonEvent(x, y, 0, false, game, 1)
+            end
+        end)
+    end
+
+    task.wait(1)
+    
+    local ui = LocalPlayer:WaitForChild("PlayerGui"):FindFirstChild("ServerBrowser", 5)
+    if ui then
+        ui.Enabled = true
+        local frame = ui:FindFirstChild("Frame")
+        if frame then 
+            frame.Visible = true 
+            local filters = frame:FindFirstChild("Filters")
+            if filters and filters:FindFirstChild("SearchRegion") and filters.SearchRegion:FindFirstChild("TextBox") then
+                filters.SearchRegion.TextBox.Text = targetRegion
+            end
+        end
+    else
+        httpServerHop()
+        return
+    end
+    
+    startTime = tick()
+    
+    task.spawn(function()
+        while not isHopping do
+            statusLabel.Text = "🔍 Đang quét server (" .. targetRegion .. ")..."
+            
+            pcall(function()
+                local remoteBrowser = ReplicatedStorage:FindFirstChild("__ServerBrowser")
+                if remoteBrowser then
+                    remoteBrowser:InvokeServer(1, targetRegion)
+                else
+                    httpServerHop()
+                end
+            end)
+            
+            task.wait(3)
+            
+            if not isHopping then
+                if (tick() - startTime) >= 10 then
+                    httpServerHop()
+                    startTime = tick()
+                else
+                    if UserInputService.WindowFocused then
+                        ClickRefresh()
+                    end
+                end
+            end
+        end
+    end)
+end
+
 -- CHỨC NĂNG DARKBEARD CHECKER
 local function checkDarkbeard()
     local enemies = Workspace:FindFirstChild("Enemies")
@@ -332,7 +487,6 @@ local function enableNoClip()
                     v.CanCollide = false
                 end
             end
-            -- Freeze character
             if player.Character:FindFirstChild("Humanoid") then
                 player.Character.Humanoid:ChangeState(11)
             end
@@ -373,7 +527,7 @@ local function unlockCamera()
     workspace.CurrentCamera.CameraType = Enum.CameraType.Custom
 end
 
--- CHỨC NĂNG
+-- KIỂM TRA ITEM
 local function checkForDarkFruit()
     local backpack = player:FindFirstChild("Backpack")
     local character = player.Character
@@ -397,7 +551,6 @@ local function checkForDarkFruit()
             end
         end
     end
-    
     return false, nil
 end
 
@@ -411,6 +564,33 @@ local function checkForFistOfDarkness()
         end
     end
     return false, nil
+end
+
+-- QUẢN LÝ HOẠT ĐỘNG
+function standUp()
+    if not isSitting then return end
+    isSitting = false
+    local humanoid = player.Character and player.Character:FindFirstChild("Humanoid")
+    if humanoid then
+        humanoid.Sit = false
+        humanoid.Jump = true
+    end
+    if invisibleSeat and invisibleSeat.Parent then
+        invisibleSeat:Destroy()
+        invisibleSeat = nil
+    end
+    if sitConnection then
+        sitConnection:Disconnect()
+        sitConnection = nil
+    end
+end
+
+local function stopHoldingSpace()
+    if spaceConnection then
+        spaceConnection:Disconnect()
+        spaceConnection = nil
+        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Space, false, game)
+    end
 end
 
 local function restoreNormalState()
@@ -452,8 +632,7 @@ local function teleportToDarkbeard(bossPos)
     stopAllActivities()
 
     local hrp = player.Character.HumanoidRootPart
-    -- Sửa ở đây: dùng vị trí trên đầu boss
-    local aboveBoss = bossPos + Vector3.new(0, 8, 0) -- 8 là cao hơn đầu boss, bạn có thể chỉnh lại
+    local aboveBoss = bossPos + Vector3.new(0, 8, 0)
     local distance = (hrp.Position - aboveBoss).Magnitude
     local tweenInfo = TweenInfo.new(distance / 100, Enum.EasingStyle.Linear)
     local tween = TweenService:Create(hrp, tweenInfo, {CFrame = CFrame.new(aboveBoss)})
@@ -487,14 +666,12 @@ spawn(function()
                 
                 notify("Darkbeard Spawned! 🔥", "Boss: " .. bossName .. "\nĐang tele đến boss...")
                 
-                -- Stop all activities and teleport
                 stopAllActivities()
                 wait(1)
                 teleportToDarkbeard(bossPos)
             end
         end
 
-        -- Nếu boss đã biến mất sau khi đã spawn thì hop server
         if darkbeardSpawned then
             local spawned = checkDarkbeard()
             if not spawned then
@@ -504,11 +681,11 @@ spawn(function()
                 break
             end
         end
-
         wait(2)
     end
 end)
 
+-- Auto check items
 spawn(function()
     while true do
         if not darkFruitFound then
@@ -560,14 +737,6 @@ local function startHoldingSpace()
     end)
 end
 
-local function stopHoldingSpace()
-    if spaceConnection then
-        spaceConnection:Disconnect()
-        spaceConnection = nil
-        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Space, false, game)
-    end
-end
-
 local function isChestNearby(pos)
     for _, obj in ipairs(workspace:GetChildren()) do
         if obj:IsA("Model") and obj.Name:find("Chest") and (obj:GetPivot().Position - pos).Magnitude < 20 then
@@ -575,24 +744,6 @@ local function isChestNearby(pos)
         end
     end
     return false
-end
-
-function standUp()
-    if not isSitting then return end
-    isSitting = false
-    local humanoid = player.Character and player.Character:FindFirstChild("Humanoid")
-    if humanoid then
-        humanoid.Sit = false
-        humanoid.Jump = true
-    end
-    if invisibleSeat and invisibleSeat.Parent then
-        invisibleSeat:Destroy()
-        invisibleSeat = nil
-    end
-    if sitConnection then
-        sitConnection:Disconnect()
-        sitConnection = nil
-    end
 end
 
 local function sitDownWithJump()
@@ -669,160 +820,6 @@ local function safeResetCharacter()
         autoTeleEnabled = true
     end
 end
-
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local TeleportService = game:GetService("TeleportService")
-local Players = game:GetService("Players")
-local VirtualInputManager = game:GetService("VirtualInputManager")
-local UserInputService = game:GetService("UserInputService")
-
-local LocalPlayer = Players.LocalPlayer
-local isHopping = false
-
--- THIẾT LẬP TÌM KIẾM
-local targetCountMin = 1
-local targetCountMax = 4
-local targetRegion = "Singapore"
-
--- HOOK METATABLE (Phải để ngoài hàm để tránh lỗi crash khi gọi serverHop nhiều lần)
-local mt = getrawmetatable(game)
-local oldNamecall = mt.__namecall
-setreadonly(mt, false)
-
-mt.__namecall = newcclosure(function(self, ...)
-    local method = getnamecallmethod()
-    local response = oldNamecall(self, ...)
-    
-    if not isHopping and (method == "InvokeServer" or method == "FireServer") and tostring(self.Name) == "__ServerBrowser" then
-        if type(response) == "table" then
-            task.defer(function()
-                -- Gọi hàm Filter ở global/shared hoặc xử lý trực tiếp
-                if shared.FilterAndJump then
-                    shared.FilterAndJump(response)
-                end
-            end)
-        end
-    end
-    return response
-end)
-setreadonly(mt, true)
-
-
--- HÀM HOP SERVER MỚI
-local function serverHop()
-    if isHopping then return end
-    statusLabel.Text = "🔄 Đang khởi động Server Browser..."
-
-    local startTime = tick()
-
-    -- Khai báo hàm lọc server (chia sẻ qua biến shared để hook ở trên có thể dùng được)
-    shared.FilterAndJump = function(serverList)
-        if isHopping or type(serverList) ~= "table" then return end
-        local bestJobId = nil
-        
-        for jobId, info in pairs(serverList) do
-            if type(info) == "table" then
-                local pCount = tonumber(info.Count) or 0
-                local pRegion = tostring(info.Region) or ""
-                
-                if jobId ~= game.JobId and string.find(pRegion, targetRegion) and (pCount >= targetCountMin and pCount <= targetCountMax) then
-                    bestJobId = jobId
-                    break 
-                end
-            end
-        end
-        
-        if bestJobId then
-            isHopping = true
-            statusLabel.Text = "⚡ Đã tìm thấy server (" .. targetRegion .. ")! Đang teleport..."
-            pcall(function()
-                TeleportService:TeleportToPlaceInstance(game.PlaceId, bestJobId, LocalPlayer)
-            end)
-        end
-    end
-
-    local function ClickRefresh()
-        pcall(function()
-            local gui = LocalPlayer.PlayerGui:FindFirstChild("ServerBrowser")
-            if not gui then return end
-            local frame = gui:FindFirstChild("Frame")
-            if not frame then return end
-            local refreshBtn = frame:FindFirstChild("Refresh")
-            
-            if refreshBtn and refreshBtn.Visible then
-                local x = refreshBtn.AbsolutePosition.X + (refreshBtn.AbsoluteSize.X / 2)
-                local y = refreshBtn.AbsolutePosition.Y + (refreshBtn.AbsoluteSize.Y / 2) + 58
-                VirtualInputManager:SendMouseButtonEvent(x, y, 0, true, game, 1)
-                task.wait(0.05)
-                VirtualInputManager:SendMouseButtonEvent(x, y, 0, false, game, 1)
-            end
-        end)
-    end
-
-    task.wait(1)
-    
-    -- Lấy UI Server Browser
-    local ui = LocalPlayer:WaitForChild("PlayerGui"):WaitForChild("ServerBrowser", 5)
-    if ui then
-        ui.Enabled = true
-        local frame = ui:FindFirstChild("Frame")
-        if frame then 
-            frame.Visible = true 
-            local filters = frame:FindFirstChild("Filters")
-            if filters and filters:FindFirstChild("SearchRegion") and filters.SearchRegion:FindFirstChild("TextBox") then
-                filters.SearchRegion.TextBox.Text = targetRegion
-            end
-        end
-    else
-        statusLabel.Text = "❌ Không tìm thấy giao diện Server Browser!"
-        return
-    end
-    
-    startTime = tick()
-    
-    -- Vòng lặp tìm kiếm
-    task.spawn(function()
-        while not isHopping do
-            statusLabel.Text = "🔍 Đang quét server (" .. targetRegion .. ")..."
-            
-            pcall(function()
-                local remote = ReplicatedStorage:FindFirstChild("__ServerBrowser")
-                if remote then
-                    remote:InvokeServer(1, targetRegion)
-                end
-            end)
-            
-            task.wait(3)
-            
-            if not isHopping then
-                -- Nếu kẹt quá 10 giây, reset lại UI
-                if (tick() - startTime) >= 10 then
-                    statusLabel.Text = "🔄 Làm mới lại bảng Server Browser..."
-                    pcall(function()
-                        if ui then
-                            ui.Enabled = false
-                            task.wait(0.5)
-                            ui.Enabled = true
-                            if ui:FindFirstChild("Frame") then ui.Frame.Visible = true end
-                            
-                            local remote = ReplicatedStorage:FindFirstChild("__ServerBrowser")
-                            if remote then remote:InvokeServer(1, targetRegion) end
-                        end
-                    end)
-                    startTime = tick()
-                else
-                    -- Auto click nút refresh nếu cửa sổ game đang active
-                    if UserInputService.WindowFocused then
-                        ClickRefresh()
-                    end
-                end
-            end
-        end
-    end)
-end
-
--- Cách sử dụng: Gọi hàm serverHop() khi bạn muốn đổi server.
--- serverHop()
 
 local function toggleAutoTele()
     if darkbeardSpawned then
@@ -942,7 +939,7 @@ end
 
 toggleBtn.MouseButton1Click:Connect(toggleAutoTele)
 
--- Auto Start
+-- Auto Start Routine
 autoTeleEnabled = true
 spawn(function()
     while true do
@@ -1054,11 +1051,8 @@ player.CharacterAdded:Connect(function()
     end
 end)
 
-print("✅ Script loaded with Darkbeard auto detector + teleport!")
+print("✅ Script loaded with Darkbeard auto detector + teleport & HTTP Server Hop Fallback!")
 print("🔥 Khi Darkbeard spawn, script sẽ tự động dừng và tele đến boss!")
-
-
-
 
 -- Auto Equip Melee and Haki Script
 spawn(function()
@@ -1066,21 +1060,18 @@ spawn(function()
         pcall(function()
             -- Auto pick Melee tool
             local player = game.Players.LocalPlayer
-            for _, v in pairs(player.Backpack:GetChildren()) do
-                if v:IsA("Tool") and v.ToolTip == "Melee" then
-                    player.Character.Humanoid:EquipTool(v)
-                    break
+            if player.Character and player.Character:FindFirstChild("Humanoid") then
+                for _, v in pairs(player.Backpack:GetChildren()) do
+                    if v:IsA("Tool") and v.ToolTip == "Melee" then
+                        player.Character.Humanoid:EquipTool(v)
+                        break
+                    end
                 end
-            end
-            -- Auto enable Haki vũ trang
-            if not player.Character:FindFirstChild("HasBuso") then
-                game.ReplicatedStorage.Remotes.CommF_:InvokeServer("Buso")
+                -- Auto enable Haki vũ trang
+                if not player.Character:FindFirstChild("HasBuso") then
+                    game.ReplicatedStorage.Remotes.CommF_:InvokeServer("Buso")
+                end
             end
         end)
     end
-
 end)
-
-
-
-
