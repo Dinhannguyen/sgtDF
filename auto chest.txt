@@ -13,6 +13,22 @@ local Workspace = game:GetService("Workspace")
 local StarterGui = game:GetService("StarterGui")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+-- BIẾN CƠ BẢN
+local player = Players.LocalPlayer
+local LocalPlayer = Players.LocalPlayer
+local remote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("CommF_")
+local preferredTeam = "Marines"
+
+-- Tự động chọn phe
+spawn(function()
+    while true do
+        if not player.Team or player.Team.Name ~= preferredTeam then
+            remote:InvokeServer("SetTeam", preferredTeam)
+        end
+        wait(2)
+    end
+end)
+
 -- BIẾN TRẠNG THÁI
 local autoTeleEnabled = false
 local isSitting = false
@@ -1059,4 +1075,5 @@ spawn(function()
         end)
     end
 end)
+
 
