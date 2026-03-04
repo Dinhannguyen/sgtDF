@@ -38,8 +38,8 @@ local targetRegion = "Singapore"
 -- TỌA ĐỘ RƯƠNG (Nhớ dán full tọa độ của bạn vào đây)
 local coords = {
     Vector3.new(-1260.4, 9.5, 1319.9),
-       Vector3.new(-626.4, 70.8, 1246.5),
-    Vector3.new(-413.7, 14.0, 258.2),
+    Vector3.new(-626.4, 70.8, 1246.5),
+   Vector3.new(-413.7, 14.0, 258.2),
     Vector3.new(176.7, 70.8, 853.0),
     Vector3.new(-850.7, 70.8, 1032.1),
     Vector3.new(-511.9, 329.7, 588.5),
@@ -295,6 +295,24 @@ UserInputService.InputEnded:Connect(function(input)
     end
 end)
 
+-- ==========================================
+-- HỆ THỐNG HOP SERVER CHỐNG KẸT
+-- ==========================================
+
+local badServers = {} -- Danh sách đen: Lưu các server lỗi/đầy để không chui vào lại
+
+-- XỬ LÝ LỖI TELEPORT (Chống kẹt khi server từ chối kết nối)
+pcall(function()
+    if not shared.TeleportErrorHandler then
+        shared.TeleportErrorHandler = TeleportService.TeleportInitFailed:Connect(function(player, teleportResult, errorMessage)
+            if player == LocalPlayer then
+                isHopping = false
+                statusLabel.Text = "❌ Lỗi Teleport! Đang thử server khác..."
+            end
+        end)
+    end
+end)
+
 -- HOOK METATABLE (Dùng cho Server Browser)
 local mt = getrawmetatable(game)
 local oldNamecall = mt.__namecall
@@ -331,21 +349,29 @@ local function httpServerHop()
         local data = HttpService:JSONDecode(response)
         if data and data.data then
             for _, server in ipairs(data.data) do
-                if server.id ~= game.JobId and server.playing >= targetCountMin and server.playing <= targetCountMax then
+                if server.id ~= game.JobId and not badServers[server.id] and server.playing >= targetCountMin and server.playing <= targetCountMax then
                     isHopping = true
                     statusLabel.Text = "⚡ Đã tìm thấy server (HTTP)! Đang teleport..."
                     pcall(function()
                         TeleportService:TeleportToPlaceInstance(game.PlaceId, server.id, LocalPlayer)
                     end)
-                    task.wait(3)
-                    break
+                    
+                    -- Timeout chống kẹt: Nếu 12s sau vẫn ở server cũ
+                    task.delay(12, function()
+                        if isHopping then
+                            isHopping = false
+                            badServers[server.id] = true
+                            statusLabel.Text = "❌ HTTP Teleport treo! Đang tìm server khác..."
+                        end
+                    end)
+                    return
                 end
             end
         end
     end
     
     if not isHopping then
-        statusLabel.Text = "❌ HTTP Hop không tìm thấy server phù hợp. Đang thử lại..."
+        statusLabel.Text = "❌ HTTP Hop chưa tìm thấy server. Đang thử lại..."
     end
 end
 
@@ -365,7 +391,7 @@ local function serverHop()
                 local pCount = tonumber(info.Count) or 0
                 local pRegion = tostring(info.Region) or ""
                 
-                if jobId ~= game.JobId and string.find(pRegion, targetRegion) and (pCount >= targetCountMin and pCount <= targetCountMax) then
+                if jobId ~= game.JobId and not badServers[jobId] and string.find(pRegion, targetRegion) and (pCount >= targetCountMin and pCount <= targetCountMax) then
                     bestJobId = jobId
                     break 
                 end
@@ -377,6 +403,15 @@ local function serverHop()
             statusLabel.Text = "⚡ Đã tìm thấy server (" .. targetRegion .. ")! Đang teleport..."
             pcall(function()
                 TeleportService:TeleportToPlaceInstance(game.PlaceId, bestJobId, LocalPlayer)
+            end)
+
+            -- Timeout chống kẹt
+            task.delay(12, function()
+                if isHopping then
+                    isHopping = false
+                    badServers[bestJobId] = true
+                    statusLabel.Text = "❌ Teleport bị treo! Đang thử lại..."
+                end
             end)
         end
     end
@@ -447,6 +482,10 @@ local function serverHop()
         end
     end)
 end
+
+-- ==========================================
+-- KẾT THÚC HỆ THỐNG HOP SERVER
+-- ==========================================
 
 -- CHỨC NĂNG DARKBEARD CHECKER
 local function checkDarkbeard()
@@ -1040,7 +1079,7 @@ player.CharacterAdded:Connect(function()
     end
 end)
 
-print("✅ Script loaded with Darkbeard auto detector + teleport & HTTP Server Hop Fallback!")
+print("✅ Script loaded with Darkbeard auto detector + teleport & HTTP Server Hop Fallback (Anti-Stuck Version)!")
 print("🔥 Khi Darkbeard spawn, script sẽ tự động dừng và tele đến boss!")
 
 -- Auto Equip Melee and Haki Script
