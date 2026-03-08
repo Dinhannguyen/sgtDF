@@ -1,0 +1,12 @@
+-- Cài đặt thời gian (600 giây = 10 phút)
+local timeLimit = 600 
+
+print("Script đã kích hoạt! Bạn sẽ bị kick sau " .. timeLimit .. " giây.")
+
+-- Sử dụng task.delay để không làm lag game
+task.delay(timeLimit, function()
+    local player = game:GetService("Players").LocalPlayer
+    if player then
+        player:Kick("Đã hết 10 phút! Hệ thống tự động kick để bạn đổi server.")
+    end
+end)
