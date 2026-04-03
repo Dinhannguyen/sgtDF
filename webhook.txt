@@ -1,15 +1,13 @@
 -- Blox Fruits: Auto Dark Fragment Monitor + Webhook + Server Browser Hop
+-- ĐÃ THAY TOÀN BỘ HỆ THỐNG HOP BẰNG FILE "hop __severbrowser.txt"
+
+repeat wait() until game:IsLoaded() and game.Players.LocalPlayer
+wait(3)
 
 local WEBHOOK_URL = "https://discord.com/api/webhooks/1435181637766877244/xgbXdGjO_GG3Cki2xMrUawRILUZhB3UNosBeslSvyQPXCp8dWQS3-vBr8ZhG8rtyyivM"
 local CHECK_INTERVAL = 5
 local COUNTDOWN_BEFORE_HOP = 5
-local MAX_HOP_TIMEOUT = 300 -- Chờ tối đa 5 phút để tìm server
-
--- CẤU HÌNH SERVER HOP MỚI
-local targetCountMin = 1
-local targetCountMax = 4
-local targetRegion = "Singapore"
-local isHopping = false
+local MAX_HOP_TIMEOUT = 300 -- 5 phút
 
 local HttpService = game:GetService("HttpService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -17,11 +15,13 @@ local Players = game:GetService("Players")
 local TeleportService = game:GetService("TeleportService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 local UserInputService = game:GetService("UserInputService")
+local StarterGui = game:GetService("StarterGui")
+
 local player = Players.LocalPlayer
 
 local function notify(title, text, duration)
     pcall(function()
-        game.StarterGui:SetCore("SendNotification", {
+        StarterGui:SetCore("SendNotification", {
             Title = title,
             Text = text,
             Duration = duration or 5
@@ -29,54 +29,179 @@ local function notify(title, text, duration)
     end)
 end
 
-if not player then
-    warn("Script cần chạy sau khi LocalPlayer tồn tại.")
-    notify("Lỗi", "Script cần chạy sau khi LocalPlayer tồn tại.", 6)
-    return
+-- ==================== HỆ THỐNG HOP SERVER (100% TỪ FILE HOP __severbrowser.txt) ====================
+math.randomseed(tick() + player.UserId)
+
+local targetCountMin = 1
+local targetCountMax = 4
+local targetRegion = "Singapore"
+
+local isHopping = false
+local startTime = tick()
+local lastTriedJob = nil
+
+local function ClickRefresh()
+    pcall(function()
+        local gui = player.PlayerGui:FindFirstChild("ServerBrowser")
+        if not gui then return end
+        local frame = gui:FindFirstChild("Frame")
+        if not frame then return end
+        local refreshBtn = frame:FindFirstChild("Refresh")
+        if refreshBtn and refreshBtn.Visible then
+            local x = refreshBtn.AbsolutePosition.X + (refreshBtn.AbsoluteSize.X / 2)
+            local y = refreshBtn.AbsolutePosition.Y + (refreshBtn.AbsoluteSize.Y / 2) + 58
+            VirtualInputManager:SendMouseButtonEvent(x, y, 0, true, game, 1)
+            task.wait(0.05)
+            VirtualInputManager:SendMouseButtonEvent(x, y, 0, false, game, 1)
+        end
+    end)
 end
 
--- TÌM KIẾM VÀ LỌC SERVER (Dành cho Metatable)
-local function FilterAndJump(serverList)
-    if isHopping or type(serverList) ~= "table" then return end
-    local bestJobId = nil
-    for jobId, info in pairs(serverList) do
-        if type(info) == "table" then
-            local pCount = tonumber(info.Count) or 0
-            local pRegion = tostring(info.Region) or ""
-            if jobId ~= game.JobId and string.find(pRegion, targetRegion) and (pCount >= targetCountMin and pCount <= targetCountMax) then
-                bestJobId = jobId
-                break 
-            end
-        end
-    end
-    if bestJobId then
-        isHopping = true
-        print("[HOP] Đã tìm thấy server (" .. targetRegion .. ")! JobId:", bestJobId)
+local function HopWithServerBrowser(jobId)
+    local remote = ReplicatedStorage:FindFirstChild("__ServerBrowser")
+    if remote then
         pcall(function()
-            TeleportService:TeleportToPlaceInstance(game.PlaceId, bestJobId, player)
+            remote:InvokeServer("teleport", jobId)
         end)
     end
 end
 
--- HOOK METATABLE
+local function FilterAndJump(serverList)
+    if isHopping or type(serverList) ~= "table" then return end
+
+    local candidates = {}
+
+    for jobId, info in pairs(serverList) do
+        if type(info) == "table" then
+            local pCount = tonumber(info.Count) or 0
+            local pRegion = tostring(info.Region) or ""
+
+            if jobId ~= game.JobId
+            and string.find(pRegion, targetRegion)
+            and (pCount >= targetCountMin and pCount <= targetCountMax) then
+                table.insert(candidates, jobId)
+            end
+        end
+    end
+
+    if #candidates > 0 then
+        local chosenJob = candidates[math.random(1, #candidates)]
+
+        isHopping = true
+        lastTriedJob = chosenJob
+
+        HopWithServerBrowser(chosenJob)
+
+        -- retry nếu fail → chọn server khác
+        task.spawn(function()
+            task.wait(5)
+            if game.JobId == lastTriedJob then
+                isHopping = false
+
+                if #candidates > 1 then
+                    local newJob
+                    repeat
+                        newJob = candidates[math.random(1, #candidates)]
+                    until newJob ~= lastTriedJob
+
+                    HopWithServerBrowser(newJob)
+                else
+                    HopWithServerBrowser(lastTriedJob)
+                end
+            end
+        end)
+    end
+end
+
+-- hook server browser
 local mt = getrawmetatable(game)
 local oldNamecall = mt.__namecall
 setreadonly(mt, false)
+
 mt.__namecall = newcclosure(function(self, ...)
     local method = getnamecallmethod()
     local response = oldNamecall(self, ...)
-    if not isHopping and (method == "InvokeServer" or method == "FireServer") and tostring(self.Name) == "__ServerBrowser" then
+
+    if not isHopping
+    and (method == "InvokeServer" or method == "FireServer")
+    and tostring(self.Name) == "__ServerBrowser" then
         if type(response) == "table" then
             task.defer(function()
                 FilterAndJump(response)
             end)
         end
     end
+
     return response
 end)
+
 setreadonly(mt, true)
 
--- REQUEST & WEBHOOK FUNCTIONS
+local function StartServerHop()
+    task.wait(math.random(2,6))
+
+    local ui = player:WaitForChild("PlayerGui"):WaitForChild("ServerBrowser", 5)
+    if ui then
+        ui.Enabled = true
+        local frame = ui:FindFirstChild("Frame")
+        if frame then 
+            frame.Visible = true 
+
+            local filters = frame:FindFirstChild("Filters")
+            if filters 
+            and filters:FindFirstChild("SearchRegion") 
+            and filters.SearchRegion:FindFirstChild("TextBox") then
+                filters.SearchRegion.TextBox.Text = targetRegion
+            end
+        end
+    else
+        return
+    end
+    
+    startTime = tick()
+
+    task.spawn(function()
+        while not isHopping do
+            pcall(function()
+                local remote = ReplicatedStorage:FindFirstChild("__ServerBrowser")
+                if remote then
+                    remote:InvokeServer(1, targetRegion)
+                end
+            end)
+
+            task.wait(3)
+
+            if not isHopping then
+                if (tick() - startTime) >= 10 then
+                    pcall(function()
+                        if ui then
+                            ui.Enabled = false
+                            task.wait(0.5)
+                            ui.Enabled = true
+
+                            if ui:FindFirstChild("Frame") then
+                                ui.Frame.Visible = true
+                            end
+
+                            local remote = ReplicatedStorage:FindFirstChild("__ServerBrowser")
+                            if remote then
+                                remote:InvokeServer(1, targetRegion)
+                            end
+                        end
+                    end)
+
+                    startTime = tick()
+                else
+                    if UserInputService.WindowFocused then
+                        ClickRefresh()
+                    end
+                end
+            end
+        end
+    end)
+end
+
+-- ==================== REQUEST & WEBHOOK ====================
 local function getRequestFunc()
     if syn and syn.request then return syn.request, "syn.request" end
     if http and http.request then return http.request, "http.request" end
@@ -88,48 +213,26 @@ end
 
 local requestFunc, requestType = getRequestFunc()
 
-local function sendWebhookWithRequest(url, jsonBody)
-    if not requestFunc then return false, "No request function available" end
-    local success, result = pcall(function()
-        return requestFunc({
-            Url = url,
-            Method = "POST",
-            Headers = {["Content-Type"] = "application/json"},
-            Body = jsonBody
-        })
-    end)
-    return success, result
-end
-
-local function sendWebhookWithHttp(url, jsonBody)
-    local success, result = pcall(function()
-        return HttpService:PostAsync(url, jsonBody, Enum.HttpContentType.ApplicationJson, false)
-    end)
-    return success, result
-end
-
 local function sendWebhook(url, data)
     local jsonBody = HttpService:JSONEncode(data)
     if requestFunc then
-        local success, result = sendWebhookWithRequest(url, jsonBody)
+        local success, _ = pcall(function()
+            requestFunc({ Url = url, Method = "POST", Headers = {["Content-Type"] = "application/json"}, Body = jsonBody })
+        end)
         if success then return true, "Sent via " .. requestType end
     end
-    local success, result = sendWebhookWithHttp(url, jsonBody)
-    if success then
-        return true, "Sent via HttpService"
-    else
-        return false, tostring(result)
-    end
+    local success = pcall(function()
+        HttpService:PostAsync(url, jsonBody, Enum.HttpContentType.ApplicationJson, false)
+    end)
+    return success, success and "Sent via HttpService" or "Failed"
 end
 
--- LẤY INVENTORY
+-- ==================== INVENTORY & DARK FRAGMENT ====================
 local function getInventory()
-    if not ReplicatedStorage:FindFirstChild("Remotes") then return nil end
-    if not ReplicatedStorage.Remotes:FindFirstChild("CommF_") then return nil end
     local ok, res = pcall(function()
         return ReplicatedStorage.Remotes.CommF_:InvokeServer("getInventory")
     end)
-    if ok and typeof(res) == "table" then return res else return nil end
+    return ok and typeof(res) == "table" and res or nil
 end
 
 local function countDarkFragments(inv)
@@ -137,7 +240,7 @@ local function countDarkFragments(inv)
     local cnt = 0
     for _, item in ipairs(inv) do
         local name = item.Name or item.name or ""
-        if name and string.lower(tostring(name)) == "dark fragment" then
+        if string.lower(tostring(name)) == "dark fragment" then
             local c = item.Count or item.count or item.Amount or item.amount or item.Quantity or item.quantity or 1
             cnt = cnt + (tonumber(c) or 1)
         end
@@ -145,108 +248,38 @@ local function countDarkFragments(inv)
     return cnt
 end
 
--- HÀM SERVER HOP MỚI (DÙNG UI)
-local function serverHopUI()
-    if isHopping then return end
-    print("[HOP] Bắt đầu khởi động Server Browser...")
-    notify("Server Hop", "Đang tìm server " .. targetRegion .. "...", 5)
-
-    local ui = player:WaitForChild("PlayerGui"):WaitForChild("ServerBrowser", 5)
-    if ui then
-        ui.Enabled = true
-        local frame = ui:FindFirstChild("Frame")
-        if frame then 
-            frame.Visible = true 
-            local filters = frame:FindFirstChild("Filters")
-            if filters and filters:FindFirstChild("SearchRegion") and filters.SearchRegion:FindFirstChild("TextBox") then
-                filters.SearchRegion.TextBox.Text = targetRegion
-            end
-        end
-    end
-    
-    local startTime = tick()
-    task.spawn(function()
-        while not isHopping do
-            pcall(function()
-                local remote = ReplicatedStorage:FindFirstChild("__ServerBrowser")
-                if remote then remote:InvokeServer(1, targetRegion) end
-            end)
-            
-            task.wait(3)
-            
-            if not isHopping then
-                if (tick() - startTime) >= 10 then
-                    pcall(function()
-                        if ui then
-                            ui.Enabled = false
-                            task.wait(0.5)
-                            ui.Enabled = true
-                            if ui:FindFirstChild("Frame") then ui.Frame.Visible = true end
-                            local remote = ReplicatedStorage:FindFirstChild("__ServerBrowser")
-                            if remote then remote:InvokeServer(1, targetRegion) end
-                        end
-                    end)
-                    startTime = tick()
-                else
-                    if UserInputService.WindowFocused then
-                        pcall(function()
-                            local gui = player.PlayerGui:FindFirstChild("ServerBrowser")
-                            if not gui then return end
-                            local frame = gui:FindFirstChild("Frame")
-                            if not frame then return end
-                            local refreshBtn = frame:FindFirstChild("Refresh")
-                            if refreshBtn and refreshBtn.Visible then
-                                local x = refreshBtn.AbsolutePosition.X + (refreshBtn.AbsoluteSize.X / 2)
-                                local y = refreshBtn.AbsolutePosition.Y + (refreshBtn.AbsoluteSize.Y / 2) + 58
-                                VirtualInputManager:SendMouseButtonEvent(x, y, 0, true, game, 1)
-                                task.wait(0.05)
-                                VirtualInputManager:SendMouseButtonEvent(x, y, 0, false, game, 1)
-                            end
-                        end)
-                    end
-                end
-            end
-        end
-    end)
-end
-
--- MONITOR CHÍNH
+-- ==================== MONITOR CHÍNH ====================
 local function startMonitoring()
     if not ReplicatedStorage:FindFirstChild("Remotes") or not ReplicatedStorage.Remotes:FindFirstChild("CommF_") then
-        warn("❌ LỖI! Game này KHÔNG phải Blox Fruits! Script sẽ KHÔNG hoạt động!")
-        notify("Lỗi", "Game này không phải Blox Fruits!", 6)
+        notify("Lỗi", "Game này KHÔNG phải Blox Fruits!", 6)
         return
     end
-    print("✅ Blox Fruits phát hiện! Đang khởi tạo monitor...")
-    notify("Blox Fruits", "Đã phát hiện game, bắt đầu monitor!", 5)
+
+    notify("Blox Fruits", "Đã phát hiện game, bắt đầu monitor Dark Fragment!", 5)
     task.wait(2)
-    
+
     local inv = getInventory()
     if not inv then
-        warn("❌ Không lấy được inventory! Rejoin game và thử lại.")
         notify("Lỗi", "Không lấy được inventory! Vui lòng rejoin.", 6)
         return
     end
-    
+
     local lastCount = countDarkFragments(inv)
-    print(string.format("[MONITOR] Khởi tạo - Dark Fragment: %d", lastCount))
-    notify("Khởi tạo", "Dark Fragment: " .. lastCount, 4)
-    
+    print("[MONITOR] Khởi tạo - Dark Fragment:", lastCount)
+
     while true do
         task.wait(CHECK_INTERVAL)
         local currentInv = getInventory()
-        if not currentInv then
-            warn("[MONITOR] Không lấy được inventory, skip check này")
-            continue
-        end
-        
+        if not currentInv then continue end
+
         local currentCount = countDarkFragments(currentInv)
-        
+
         if currentCount > lastCount then
             local delta = currentCount - lastCount
-            print(string.format("🎉 TĂNG +%d! Trước: %d, Hiện tại: %d", delta, lastCount, currentCount))
-            notify("Dark Fragment", "Tăng +" .. delta .. " (Tổng: " .. currentCount .. ")", 5)
-            
+            print(string.format("🎉 TĂNG +%d Dark Fragment! Tổng: %d", delta, currentCount))
+            notify("Dark Fragment", "Tăng +" .. delta .. " (Tổng: " .. currentCount .. ")", 6)
+
+            -- Gửi Webhook
             local webhookData = {
                 username = "Dark Fragment Bot",
                 avatar_url = "https://cdn.discordapp.com/attachments/1433496764425703424/1434907067662991474/FB_IMG_1760762564286.jpg",
@@ -261,99 +294,76 @@ local function startMonitoring()
                         {name = "💎 Hiện tại", value = tostring(currentCount), inline = true},
                         {name = "➕ Tăng", value = string.format("+%d", delta), inline = true}
                     },
-                    footer = {text = "Auto Server Hop in 5s..."},
+                    footer = {text = "Auto Server Hop in " .. COUNTDOWN_BEFORE_HOP .. "s..."},
                     timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ")
                 }}
             }
-            
-            local success, result = sendWebhook(WEBHOOK_URL, webhookData)
-            if success then
-                print(string.format("✅ [WEBHOOK SENT] +%d Dark Fragment (Total: %d)", delta, currentCount))
-                notify("Webhook", "Đã gửi thông tin Dark Fragment!", 4)
-            else
-                warn("[WEBHOOK ERROR]", result)
-                notify("Webhook", "Gửi webhook thất bại!", 4)
-            end
-            
+            sendWebhook(WEBHOOK_URL, webhookData)
+
+            -- Countdown rồi hop
             for i = COUNTDOWN_BEFORE_HOP, 1, -1 do
-                print(string.format("⏳ Hop server trong: %d giây", i))
-                notify("Server Hop", "Chuyển server sau " .. i .. " giây", 1)
+                notify("Server Hop", "Chuyển server sau " .. i .. " giây...", 1)
                 task.wait(1)
             end
-            
-            -- GỌI HÀM HOP MỚI
-            print("🔄 Bắt đầu tìm kiếm server mới qua UI...")
-            serverHopUI()
-            
+
+            print("🔄 Bắt đầu Server Hop (Singapore 1-4)...")
+            StartServerHop()
+
             local waitCount = 0
             while not isHopping and waitCount < MAX_HOP_TIMEOUT do
                 task.wait(1)
                 waitCount = waitCount + 1
             end
-            
+
             if isHopping then
-                notify("Server Hop", "Đang tiến hành Teleport...", 5)
-                task.wait(15) -- Chờ thời gian để quá trình Teleport hoàn tất
+                notify("Server Hop", "Đang teleport đến server mới...", 5)
+                task.wait(15)
             else
-                warn(string.format("❌ HOP THẤT BẠI! Đã chờ %d giây mà không tìm được server. Đang kick player...", MAX_HOP_TIMEOUT))
-                notify("Server Hop", "Chuyển server timeout! Đang kick...", 6)
-                task.wait(2)
-                player:Kick("❌ Server Hop thất bại do không tìm được server phù hợp sau " .. MAX_HOP_TIMEOUT .. "s. Vui lòng rejoin!")
+                notify("Lỗi", "Không tìm được server sau " .. MAX_HOP_TIMEOUT .. " giây!", 6)
+                player:Kick("Server Hop thất bại - Không tìm thấy server phù hợp!")
             end
-            
+
             lastCount = currentCount
-            
         elseif currentCount < lastCount then
-            print(string.format("[MONITOR] Dark Fragment giảm: %d -> %d", lastCount, currentCount))
-            notify("Dark Fragment", "Giảm: " .. lastCount .. " -> " .. currentCount, 4)
             lastCount = currentCount
         end
     end
 end
+
+-- ==================== KHỞI ĐỘNG ====================
+print("✅ Auto Dark Fragment Monitor + Webhook + Server Browser Hop đã load!")
+notify("Script", "Dark Fragment Monitor đã khởi động!", 5)
 
 local function waitForPlayerSpawn()
     while not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") do
         task.wait(1)
     end
-    print("[SPAWN] Player đã spawn!")
 end
-
-print("[DARK FRAGMENT MONITOR] Script loaded!")
-print("Webhook URL:", WEBHOOK_URL)
-print("Method:", requestFunc and requestType or "HttpService")
-notify("Script", "Dark Fragment Monitor đã khởi động!", 5)
-
 waitForPlayerSpawn()
+
 task.spawn(startMonitoring)
 
-game:GetService("UserInputService").InputBegan:Connect(function(input, processed)
-    if processed then return end
-    if input.KeyCode == Enum.KeyCode.M then
-        local inv = getInventory()
-        local currentCount = countDarkFragments(inv)
-        local webhookData = {
-            username = "Dark Fragment Bot",
-            avatar_url = "https://cdn.discordapp.com/attachments/1433496764425703424/1434907067662991474/FB_IMG_1760762564286.jpg",
-            embeds = {{
-                title = "💠 Manual Report",
-                description = string.format("**%s** đã gửi thông tin Dark Fragment thủ công", player.Name),
-                color = 3447003,
-                fields = {
-                    {name = "👤 Player", value = tostring(player.Name), inline = true},
-                    {name = "🆔 User ID", value = tostring(player.UserId or 0), inline = true},
-                    {name = "💎 Dark Fragment", value = tostring(currentCount), inline = true}
-                },
-                footer = {text = "Manual report by pressing M"},
-                timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ")
-            }}
-        }
-        local success, result = sendWebhook(WEBHOOK_URL, webhookData)
-        if success then
-            print("✅ Đã gửi thông tin Dark Fragment qua webhook!")
-            notify("Webhook", "Đã gửi thông tin Dark Fragment!", 4)
-        else
-            print("❌ Gửi webhook thất bại!")
-            notify("Webhook", "Gửi webhook thất bại!", 4)
-        end
-    end
+-- Phím M để gửi báo cáo thủ công
+UserInputService.InputBegan:Connect(function(input, processed)
+    if processed or input.KeyCode ~= Enum.KeyCode.M then return end
+    local inv = getInventory()
+    local currentCount = countDarkFragments(inv)
+    local webhookData = {
+        username = "Dark Fragment Bot",
+        avatar_url = "https://cdn.discordapp.com/attachments/1433496764425703424/1434907067662991474/FB_IMG_1760762564286.jpg",
+        embeds = {{
+            title = "💠 Manual Report",
+            description = string.format("**%s** gửi báo cáo thủ công", player.Name),
+            color = 3447003,
+            fields = {
+                {name = "👤 Player", value = tostring(player.Name), inline = true},
+                {name = "🆔 User ID", value = tostring(player.UserId or 0), inline = true},
+                {name = "💎 Dark Fragment", value = tostring(currentCount), inline = true}
+            },
+            footer = {text = "Manual report by pressing M"},
+            timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ")
+        }}
+    }
+    sendWebhook(WEBHOOK_URL, webhookData)
+    notify("Webhook", "Đã gửi báo cáo thủ công!", 4)
 end)
