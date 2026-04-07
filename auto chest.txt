@@ -32,7 +32,7 @@ local isHopping = false
 
 -- THIẾT LẬP TÌM KIẾM SERVER
 local targetCountMin = 1
-local targetCountMax = 4
+local targetCountMax = 5
 local targetRegion = "Singapore"
 
 -- TỌA ĐỘ RƯƠNG (giữ nguyên full list của bạn)
